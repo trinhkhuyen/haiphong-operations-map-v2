@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseCsv, parseHnthCsv } from "./HnthPanel";
+import { parseCsv, parseHnthCsv } from "./hnth-import-export";
 
 describe("parseCsv", () => {
   it("tách ô, xử lý ngoặc kép, dấu phẩy và ngoặc kép lồng", () => {
