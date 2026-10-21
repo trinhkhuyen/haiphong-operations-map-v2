@@ -7,7 +7,9 @@ import { EXE_VERSION_SCAN_BYTES, readExeVersion } from "@haiphong-ops/hnth-proto
 
 export const MAX_RELEASE_BYTES = 250 * 1024 * 1024;
 export const safeReleaseVersion = (value) => String(value || "").trim().match(/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/)?.[0] || null;
-export const safeReleaseFileName = (value) => path.basename(String(value || "agent.exe")).replace(/[^A-Za-z0-9._-]/g, "_");
+// path.win32.basename tách theo cả "/" và "\\": tên file gửi từ Windows (C:\...\a.exe)
+// cũng chỉ còn phần tên khi backend chạy trên Linux (Docker).
+export const safeReleaseFileName = (value) => path.win32.basename(String(value || "agent.exe")).replace(/[^A-Za-z0-9._-]/g, "_");
 
 /** Ghi body request ra file (không ghi đè), tính SHA-256; lỗi thì xóa file dở. */
 export async function writeRelease(req, filePath) {

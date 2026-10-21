@@ -1,6 +1,7 @@
 // Unit test cho phần thuần của Agent (không ping, không mạng, không ghi file).
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import path from "node:path";
 import { createBackendClient } from "../src/backend-client.mjs";
 import { applyAgentConfig } from "../src/config.mjs";
 import { installationIdFor, isCopiedInstallation } from "../src/identity.mjs";
@@ -94,12 +95,13 @@ describe("monitor", () => {
 });
 
 describe("identity", () => {
+  // Đường dẫn theo hệ điều hành đang chạy test (CI là Linux, Agent thật chạy Windows).
   it("installationId phụ thuộc máy và thư mục config, không phân biệt hoa thường", () => {
-    const a = installationIdFor("guid-1", "C:\\Agent\\config.json");
+    const a = installationIdFor("guid-1", path.join("C:", "Agent", "config.json"));
     assert.match(a, /^[0-9a-f]{32}$/);
-    assert.equal(installationIdFor("guid-1", "C:\\AGENT\\config.json"), a);
-    assert.notEqual(installationIdFor("guid-1", "C:\\Agent2\\config.json"), a);
-    assert.notEqual(installationIdFor("guid-2", "C:\\Agent\\config.json"), a);
+    assert.equal(installationIdFor("guid-1", path.join("C:", "AGENT", "config.json")), a);
+    assert.notEqual(installationIdFor("guid-1", path.join("C:", "Agent2", "config.json")), a);
+    assert.notEqual(installationIdFor("guid-2", path.join("C:", "Agent", "config.json")), a);
   });
   it("phát hiện bản copy theo installationId, hoặc machineId với config cũ", () => {
     const current = { machineId: "m1", installationId: "i1" };
