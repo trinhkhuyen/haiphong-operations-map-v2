@@ -28,7 +28,9 @@ README.md mô tả `packages/contracts`, `services/api`, `infra` — **không t�
 ```bash
 pnpm install                 # nếu báo ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY: CI=true pnpm install --frozen-lockfile
 pnpm check                   # tsc -b apps/web + node --check mọi .mjs/.cjs trong services/ và scripts/ (~15s)
-pnpm check:full              # như trên + vite build production (~45s)
+pnpm check:full              # như trên + unit test + vite build production (~50s)
+pnpm test                    # unit test web (vitest, ~2s): hàm thuần, store (khóa hình dạng persist), CSV, đọc version exe
+pnpm test:e2e                # e2e backend + agent thật trên schema Postgres riêng, cổng ngẫu nhiên (~20s); không có Postgres thì skip
 pnpm dev                     # chỉ frontend, http://127.0.0.1:5173 (proxy /api -> 127.0.0.1:8788)
 pnpm smoke:backend           # smoke test chỉ-đọc vào backend đang chạy (BACKEND_URL, SMOKE_USER/SMOKE_PASSWORD tùy chọn)
 ```
@@ -45,7 +47,11 @@ docker compose --env-file .env.source -f docker-compose.source.yml up -d --build
 - Trong Claude desktop: `.claude/launch.json` có `web-running` (gắn vào server đã chạy sẵn ở 5173), `web` (tự chạy Vite) và `stack-docker`. Trên máy dev hiện tại thường đã có sẵn node:5173 + node:8788 + postgres:5432 đang chạy — kiểm tra `netstat -ano | grep 5173` trước khi khởi động thêm.
 - `pnpm smoke:backend` trỏ thẳng vào 8788 (hoặc domain Caddy), không trỏ vào Vite 5173 vì Vite chỉ proxy `/api`.
 
-Không có test tự động nào. "Xong" nghĩa là tối thiểu `pnpm check` đạt; thay đổi UI thì mở app kiểm tra bằng mắt; thay đổi backend thì chạy stack + `pnpm smoke:backend`.
+"Xong" nghĩa là `pnpm check` và `pnpm test` đạt; đụng backend hoặc agent thì thêm `pnpm test:e2e`; thay đổi UI thì mở app kiểm tra bằng mắt.
+
+- Test là test đặc tả (characterization): ghi lại hành vi hiện tại làm mốc cho refactor. Test đỏ sau khi refactor nghĩa là hành vi đã đổi, cần sửa code chứ không sửa test, trừ khi thay đổi hành vi là chủ ý.
+- Unit test đặt cạnh file nguồn (`*.test.ts`), chạy môi trường node; store test phải stub `window.localStorage`, vì thiếu nó thì zustand persist tắt hẳn.
+- E2E ở `scripts/e2e/` (`helpers.mjs` dựng Postgres schema `hnth_e2e_<pid>`, backend và agent node); `E2E_DATABASE_URL` để đổi DB. Test không đụng backend 8788 hay dữ liệu thật.
 
 ## Harness đã cài (`.claude/`)
 

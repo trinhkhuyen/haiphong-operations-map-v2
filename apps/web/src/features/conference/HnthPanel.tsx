@@ -24,14 +24,14 @@ const statusOrder: HnthConnectionStatus[] = ["unconnected", "connected", "lost"]
 // Tăng/giảm giá trị này nếu muốn điểm được hiển thị gần/xa hơn.
 const HNTH_MENU_POINT_ZOOM = 10.5;
 
-type HnthImportRow = { name: string; ipAddress: string; gateway: string; modelVendor: string };
+export type HnthImportRow = { name: string; ipAddress: string; gateway: string; modelVendor: string };
 
 function csvEscape(value: unknown) {
   const text = String(value ?? "");
   return /[",\r\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
 }
 
-function parseCsv(text: string): string[][] {
+export function parseCsv(text: string): string[][] {
   const rows: string[][] = [];
   let row: string[] = [];
   let value = "";
@@ -59,7 +59,7 @@ function normalizeCsvHeader(value: string) {
   return value.replace(/^\uFEFF/, "").trim().toLocaleLowerCase("vi").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[đĐ]/g, "d").replace(/[\s_/-]+/g, "");
 }
 
-function parseHnthCsv(text: string): HnthImportRow[] {
+export function parseHnthCsv(text: string): HnthImportRow[] {
   const rows = parseCsv(text);
   if (rows.length < 2) return [];
   const headers = rows[0].map(normalizeCsvHeader);

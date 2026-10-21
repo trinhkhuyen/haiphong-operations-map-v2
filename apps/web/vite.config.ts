@@ -1,3 +1,4 @@
+/// <reference types="vitest/config" />
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 
@@ -34,5 +35,10 @@ export default defineConfig({
         },
       },
     },
+  },
+  // Unit test cho hàm thuần và store; không cần DOM nên chạy môi trường node.
+  test: {
+    environment: "node",
+    include: ["src/**/*.test.ts"],
   },
 });

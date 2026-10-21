@@ -2,6 +2,7 @@
 // Kiểm tra nhanh toàn bộ workspace trước khi coi một thay đổi là xong.
 //   node scripts/check.mjs          -> typecheck web + kiểm tra cú pháp các service Node
 //   node scripts/check.mjs --build  -> thêm vite build production
+//   node scripts/check.mjs --test   -> thêm unit test web (vitest)
 import { spawnSync } from "node:child_process";
 import { readdirSync, statSync } from "node:fs";
 import path from "node:path";
@@ -9,6 +10,7 @@ import { fileURLToPath } from "node:url";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const withBuild = process.argv.includes("--build");
+const withTest = process.argv.includes("--test");
 const isWindows = process.platform === "win32";
 const failures = [];
 
@@ -44,6 +46,11 @@ run("web: tsc -b", tsc, ["-b", "--pretty", "false"], path.join(root, "apps/web")
 
 for (const file of [...nodeSources(path.join(root, "services")), ...nodeSources(path.join(root, "scripts"))]) {
   run(`node --check ${path.relative(root, file).replaceAll("\\", "/")}`, process.execPath, ["--check", file]);
+}
+
+if (withTest) {
+  const vitest = path.join(root, "apps/web/node_modules/.bin", isWindows ? "vitest.CMD" : "vitest");
+  run("web: vitest run", vitest, ["run"], path.join(root, "apps/web"));
 }
 
 if (withBuild) {

@@ -7,6 +7,7 @@
     "dev": "vite --host 127.0.0.1",
     "build": "tsc -b && vite build",
     "typecheck": "tsc -b --pretty false",
+    "test": "vitest run",
     "data:osm": "node scripts/fetch-osm-operational-layers.mjs",
     "data:vietnam-provinces": "node scripts/fetch-vietnam-province-boundaries.mjs"
   },
@@ -27,6 +28,7 @@
     "@types/react-dom": "^19.1.0",
     "@vitejs/plugin-react": "^4.4.1",
     "typescript": "^5.8.3",
-    "vite": "^6.1.0"
+    "vite": "^6.1.0",
+    "vitest": "^3.2.7"
   }
 }

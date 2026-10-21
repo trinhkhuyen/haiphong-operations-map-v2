@@ -7,7 +7,9 @@
     "build": "pnpm --filter @haiphong-ops/web build",
     "typecheck": "pnpm --filter @haiphong-ops/web typecheck",
     "check": "node scripts/check.mjs",
-    "check:full": "node scripts/check.mjs --build",
+    "check:full": "node scripts/check.mjs --build --test",
+    "test": "pnpm --filter @haiphong-ops/web test",
+    "test:e2e": "node --test \"scripts/e2e/*.test.mjs\"",
     "smoke:backend": "node scripts/smoke-backend.mjs"
   }
 }

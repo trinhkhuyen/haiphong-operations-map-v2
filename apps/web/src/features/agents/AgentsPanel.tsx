@@ -11,7 +11,7 @@ type Agent = {
 
 // Đọc ProductVersion (UTF-16LE) trong 2 MB đầu file .exe, cùng cách backend làm
 // (readExeVersion trong server.mjs), để hiện version ngay khi chọn file.
-async function readExeVersion(file: File): Promise<string | null> {
+export async function readExeVersion(file: File): Promise<string | null> {
   const data = new Uint8Array(await file.slice(0, 2 * 1024 * 1024).arrayBuffer());
   const key = Array.from("ProductVersion\0").flatMap((char) => [char.charCodeAt(0), 0]);
   for (let index = 0; index + key.length < data.length; index += 2) {
@@ -27,7 +27,7 @@ async function readExeVersion(file: File): Promise<string | null> {
 }
 
 // So sánh số theo từng phần (0.2.10 > 0.2.9); chỉ dùng để hiện thông báo hạ cấp.
-function compareVersions(a: string, b: string) {
+export function compareVersions(a: string, b: string) {
   const left = a.split(/[.-]/).map(Number);
   const right = b.split(/[.-]/).map(Number);
   for (let index = 0; index < Math.max(left.length, right.length); index += 1) {
