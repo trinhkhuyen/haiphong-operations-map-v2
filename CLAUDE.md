@@ -23,7 +23,9 @@ Agent (Windows tray, Electron)  --HTTPS outbound, Bearer token-->  hnth-backend 
 
 README.md mô tả `packages/contracts`, `services/api`, `infra` — **không tồn tại**, đó là kế hoạch cũ. Tin code, không tin README.
 
-Đang refactor module hóa theo giai đoạn: tiến độ, việc còn lại và quyết định chờ duyệt ở `docs/REFACTOR-HANDOFF.md`.
+Refactor module hóa 8 giai đoạn đã xong; lịch sử, cách kiểm chứng (exe Agent, giao diện cần đăng nhập) và quyết định chờ duyệt ở `docs/REFACTOR-HANDOFF.md`.
+
+Bản đồ (`apps/web/src/features/map/`): `MapCanvas.tsx` chỉ ráp JSX; ref/state dùng chung ở `hooks/useMapScope.ts`, mỗi nhóm effect là một hook trong `hooks/` (thứ tự gọi hook có ý nghĩa: map dựng trước, lớp địa giới trước đồng bộ HNTH), hàm thao tác MapLibre/Terra Draw ở `lib/`. CSS: `styles/global.css` chỉ `@import` các file theo tính năng — **thứ tự import là thứ tự cascade**, thêm quy tắc vào đúng file thay vì đổi thứ tự.
 
 ## Lệnh (đã kiểm chứng trên Windows, pnpm 11, Node 25)
 
@@ -104,5 +106,5 @@ docker compose --env-file .env.source -f docker-compose.source.yml up -d --build
 1. **Repo cũ**: từ 2026-10-21 làm việc trên `origin` = `trinhkhuyen/haiphong-operations-map-v2` (lịch sử sạch, bắt đầu từ `d8337c4`). Repo cũ `haiphong-operations-map` đã archive (chỉ đọc) trên GitHub và vẫn chứa `.codex_tmp/` trong lịch sử. Bản sao cục bộ cũ (`Documents\Map`, nhánh `legacy-main`, `.codex_tmp/`, `artifacts/`, exe 0.1.x) đã bị xóa.
 2. Backend: không rate-limit `/api/auth/login`; cookie refresh thiếu `Secure`; message lỗi 500 trả nguyên `error.message`; schema vẫn là một script idempotent trong `db.mjs` (chưa có migration theo phiên bản).
 3. Agent: ~~`test-point` đưa `ipAddress` chưa kiểm tra vào `ping.exe`~~ — đã xử lý ở GĐ3 (`pingHost` chỉ nhận literal IPv4/IPv6). Backend `/api/hnth/test` vẫn chưa validate `ipAddress`.
-4. Web: `xlsx@0.18.5` (bản npm đã ngừng, có CVE) — đã gom vào `core/spreadsheet.ts`, người dùng chọn thay sau; `MapCanvas.tsx` ~2.900 dòng; bundle `index`/`map` >900 kB. Backend `PUT /api/users/:id` không kiểm tra độ dài mật khẩu (UI chặn < 8 ký tự).
+4. Web: `xlsx@0.18.5` (bản npm đã ngừng, có CVE) — đã gom vào `core/spreadsheet.ts`, người dùng chọn thay sau; bundle `index`/`map` >900 kB. Backend `PUT /api/users/:id` không kiểm tra độ dài mật khẩu (UI chặn < 8 ký tự).
 5. Chưa có lint và CI (đã có unit test + e2e).
