@@ -1,6 +1,6 @@
-import { readFile, writeFile, mkdir, unlink } from "node:fs/promises";
+import { readFile, writeFile, mkdir, unlink, copyFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
-import { execFile, spawn } from "node:child_process";
+import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { createHash, randomUUID, randomBytes } from "node:crypto";
 import os from "node:os";
@@ -27,19 +27,26 @@ async function localMachineId() {
   }
   return createHash("sha256").update(`${os.hostname()}|${process.env.USERNAME || process.env.USER || "unknown"}`).digest("hex").slice(0, 32);
 }
-async function ensureInstallationIdentity() {
+// Định danh bản cài = máy (MachineGuid) + thư mục chứa config.json. Copy thư mục
+// Agent sang máy khác hoặc sang thư mục khác trên cùng máy đều cho installationId
+// mới; khi đó Agent tự xin agentId + token riêng thay vì dùng chung id với bản gốc.
+let installation;
+async function currentInstallation() {
+  if (installation) return installation;
   const machineId = await localMachineId();
-  if (!config.machineId) { config.machineId = machineId; await persistConfig(); return; }
-  if (config.machineId === machineId || !apiBase) return;
-  const response = await backendFetch(apiUrl("/api/agents/clone"), { method: "POST", headers: authHeaders(), body: JSON.stringify({ agentId: config.agentId, machineId, name: `${config.agentName || "Agent HNTH"} - ${os.hostname()}` }) });
-  if (!response.ok) throw new Error(`Agent clone registration returned ${response.status}`);
+  const configDir = path.resolve(path.dirname(String(configPath))).toLowerCase();
+  installation = { machineId, installationId: createHash("sha256").update(`${machineId}|${configDir}`).digest("hex").slice(0, 32) };
+  return installation;
+}
+async function enrollAsNewAgent(reason) {
+  const { machineId, installationId } = await currentInstallation();
+  const response = await backendFetch(apiUrl("/api/agents/clone"), { method: "POST", headers: authHeaders(), body: JSON.stringify({ agentId: config.agentId, machineId, installationId, name: `${config.agentName || "Agent HNTH"} - ${os.hostname()}`, version: runtimeVersion }) });
+  if (!response.ok) throw new Error(`Agent enrollment returned ${response.status}`);
   const replacement = await response.json();
-  config.agentId = replacement.agentId;
-  config.token = replacement.token;
-  config.agentName = replacement.name;
-  config.machineId = machineId;
+  const previousId = config.agentId;
+  Object.assign(config, { agentId: replacement.agentId, token: replacement.token, agentName: replacement.name, machineId, installationId });
   await persistConfig();
-  console.log(`detected cloned installation; registered new agent ${config.agentId} for ${os.hostname()}`);
+  console.log(`${reason}: ${previousId} -> agent ${config.agentId} (${os.hostname()})`);
 }
 const updateResultPath = path.join(path.dirname(String(configPath)), "update-result.json");
 console.log(`HNTH Agent ${config.agentId} started; config: ${configPath}; relay: ${config.relayUrl}${apiBase ? `; backend: ${apiBase}` : ""}`);
@@ -316,10 +323,13 @@ async function pollCommands() {
   }
   if (command.type === "agent-update") {
     try {
-      if (!command.url || !command.sha256 || !command.version) throw new Error("agent-update requires url, sha256 and version");
+      if (!(command.path || command.url) || !command.sha256 || !command.version) throw new Error("agent-update requires path, sha256 and version");
       if (!process.versions.electron || process.platform !== "win32") throw new Error("remote update requires the packaged Windows Agent");
       if (command.fileName && !String(command.fileName).toLowerCase().endsWith(".exe")) throw new Error("remote update must be an .exe file");
-      const response = await backendFetch(command.url, { headers: { authorization: `Bearer ${config.token}` } });
+      // Backend gửi đường dẫn tương đối; ghép với backendUrl của chính Agent để máy ở
+      // LAN khác tải được. Token Agent chỉ được gửi tới đúng backend đã cấu hình.
+      const source = new URL(command.path || command.url, apiBase || undefined);
+      const response = await backendFetch(source, { headers: apiBase && source.origin === apiBase.origin ? { authorization: `Bearer ${config.token}` } : {} });
       if (!response.ok) throw new Error(`Update download returned ${response.status}`);
       const contentLength = Number(response.headers.get("content-length") || 0);
       if (contentLength > 250 * 1024 * 1024) throw new Error("Update file is too large (max 250 MB)");
@@ -331,14 +341,22 @@ async function pollCommands() {
       await mkdir(updateDir, { recursive: true });
       const filePath = path.join(updateDir, `agent-${String(command.version).replace(/[^a-zA-Z0-9._-]/g, "_")}.exe`);
       await writeFile(filePath, bytes);
-      const resultFile = updateResultPath;
-      // Electron Portable runs from a temporary extracted executable. Replace and
-      // relaunch the original portable file, not process.execPath.
-      const portableDir = process.env.PORTABLE_EXECUTABLE_DIR || path.dirname(process.execPath);
-      const portableName = process.env.PORTABLE_EXECUTABLE_APP_FILENAME || path.basename(process.env.PORTABLE_EXECUTABLE_FILE || process.execPath);
-      const targetExe = process.env.PORTABLE_EXECUTABLE_FILE || path.join(portableDir, portableName);
-      const updater = spawn(process.execPath, ["--hnth-apply-update", "--target-pid", String(process.pid), "--target-exe", targetExe, "--staged-file", filePath, "--result-file", resultFile, "--updated-version", String(command.version)], { detached: true, stdio: "ignore", windowsHide: true });
-      updater.unref();
+      // Electron Portable chạy từ thư mục giải nén tạm, bị launcher xóa khi Agent thoát.
+      // Vì vậy updater là script PowerShell được copy ra cạnh config, và file cần thay
+      // là file portable gốc (PORTABLE_EXECUTABLE_FILE), không phải process.execPath.
+      const script = path.join(updateDir, "apply-update.ps1");
+      await copyFile(fileURLToPath(new URL("./apply-update.ps1", import.meta.url)), script);
+      const targetExe = process.env.PORTABLE_EXECUTABLE_FILE || process.execPath;
+      // Launcher portable gom tiến trình con vào một Windows Job và kill cả Job khi Agent
+      // thoát, kể cả tiến trình spawn detached. Tạo updater qua WMI (Win32_Process.Create)
+      // để nó nằm ngoài Job đó; lệnh này trả về ngay sau khi updater đã được tạo.
+      const quote = (value) => `"${String(value).replaceAll('"', "")}"`;
+      const updaterCommand = ["powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden", "-File", quote(script), "-ProcessId", process.pid, "-TargetExe", quote(targetExe), "-StagedFile", quote(filePath), "-ResultFile", quote(updateResultPath), "-Version", quote(command.version), "-Sha256", digest].join(" ");
+      const env = { ...process.env, HNTH_UPDATER_COMMAND: updaterCommand };
+      delete env.ELECTRON_RUN_AS_NODE;
+      const launcher = "$si = New-CimInstance -ClassName Win32_ProcessStartup -ClientOnly -Property @{ ShowWindow = [uint16]0 }; $r = Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{ CommandLine = $env:HNTH_UPDATER_COMMAND; ProcessStartupInformation = $si }; if ($r.ReturnValue -ne 0) { Write-Error \"Win32_Process.Create returned $($r.ReturnValue)\"; exit 1 }; Write-Output $r.ProcessId";
+      const { stdout } = await exec("powershell.exe", ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-Command", launcher], { windowsHide: true, env });
+      console.log(`updater started outside the portable job (pid ${stdout.trim()})`);
       config.pendingUpdate = { version: command.version, filePath, sha256: digest, stagedAt: new Date().toISOString() };
       await persistConfig();
       console.log(`verified update ${command.version}; updater started and Agent will restart after replacement`);
@@ -401,18 +419,32 @@ async function pollCommands() {
 
 async function sendHeartbeat() {
   if (!apiBase) return;
-  const response = await backendFetch(apiUrl("/api/agents/heartbeat"), { method: "POST", headers: authHeaders(), body: JSON.stringify({ agentId: config.agentId, machineId: config.machineId, version: runtimeVersion, sentAt: new Date().toISOString() }) });
+  const { installationId } = await currentInstallation();
+  const response = await backendFetch(apiUrl("/api/agents/heartbeat"), { method: "POST", headers: authHeaders(), body: JSON.stringify({ agentId: config.agentId, machineId: config.machineId, installationId, version: runtimeVersion, sentAt: new Date().toISOString() }) });
+  // 409: agentId này đã thuộc bản cài khác -> đăng ký lại, register() sẽ tự xin id mới.
+  if (response.status === 409) { await register(); return; }
   if (!response.ok) throw new Error(`Backend heartbeat returned ${response.status}`);
 }
 
-async function register() {
+async function register(attempt = 0) {
   if (!apiBase) return;
-  const response = await backendFetch(apiUrl("/api/agents/register"), { method: "POST", headers: authHeaders(), body: JSON.stringify({ agentId: config.agentId, machineId: config.machineId, name: config.agentName || config.agentId, version: runtimeVersion }) });
+  const { machineId, installationId } = await currentInstallation();
+  // Config mang installationId/machineId của nơi khác nghĩa là thư mục Agent đã bị copy.
+  const copied = config.installationId ? config.installationId !== installationId : Boolean(config.machineId && config.machineId !== machineId);
+  if (copied) await enrollAsNewAgent("copied Agent installation detected");
+  const response = await backendFetch(apiUrl("/api/agents/register"), { method: "POST", headers: authHeaders(), body: JSON.stringify({ agentId: config.agentId, machineId, installationId, name: config.agentName || config.agentId, version: runtimeVersion }) });
+  if (response.status === 409 && attempt === 0) {
+    await enrollAsNewAgent("agent id already used by another installation");
+    return register(attempt + 1);
+  }
   if (!response.ok) throw new Error(`Backend registration returned ${response.status}`);
-  console.log(`registered agent ${config.agentId} with backend`);
+  if (config.installationId !== installationId || config.machineId !== machineId) {
+    Object.assign(config, { machineId, installationId });
+    await persistConfig();
+  }
+  console.log(`registered agent ${config.agentId} with backend (installation ${installationId})`);
 }
 
-await ensureInstallationIdentity().catch((error) => console.error(`installation identity check failed: ${error.message}`));
 await reportPendingUpdate();
 await register().catch((error) => console.error(error.message));
 await sendHeartbeat().catch((error) => console.error(error.message));

@@ -1,5 +1,4 @@
 const { app, Menu, Tray, nativeImage, shell, dialog } = require("electron");
-const { spawn } = require("node:child_process");
 const path = require("node:path");
 const fs = require("node:fs");
 
@@ -12,43 +11,24 @@ const agentPath = path.join(agentRoot, "src", "agent.mjs");
 let tray;
 let agentStatus = "Đang khởi động…";
 
-function argValue(name) {
-  const index = process.argv.indexOf(name);
-  return index >= 0 ? process.argv[index + 1] : "";
-}
-
-function isProcessRunning(pid) {
-  try { process.kill(Number(pid), 0); return true; } catch (error) { return error?.code === "EPERM"; }
-}
-
-async function applyUpdate() {
-  const targetPid = Number(argValue("--target-pid"));
-  const fallbackPortableDir = process.env.PORTABLE_EXECUTABLE_DIR || path.dirname(process.execPath);
-  const fallbackPortableName = process.env.PORTABLE_EXECUTABLE_APP_FILENAME || path.basename(process.env.PORTABLE_EXECUTABLE_FILE || process.execPath);
-  const targetExe = path.resolve(argValue("--target-exe") || process.env.PORTABLE_EXECUTABLE_FILE || path.join(fallbackPortableDir, fallbackPortableName));
-  const stagedFile = path.resolve(argValue("--staged-file"));
-  const resultFile = path.resolve(argValue("--result-file"));
-  const version = argValue("--updated-version");
-  const result = (status, detail) => fs.promises.mkdir(path.dirname(resultFile), { recursive: true }).then(() => fs.promises.writeFile(resultFile, JSON.stringify({ version, status, detail, reportedAt: new Date().toISOString() }, null, 2)));
-  try {
-    if (!targetPid || !targetExe || !stagedFile || !resultFile || !version) throw new Error("updater arguments are incomplete");
-    for (let attempt = 0; attempt < 120 && isProcessRunning(targetPid); attempt += 1) await new Promise((resolve) => setTimeout(resolve, 250));
-    if (isProcessRunning(targetPid)) throw new Error("old Agent did not exit within 30 seconds");
-    await fs.promises.access(stagedFile, fs.constants.R_OK);
-    await fs.promises.access(targetExe, fs.constants.W_OK);
-    const backup = `${targetExe}.previous`;
-    const replacement = `${targetExe}.replacement`;
-    await fs.promises.copyFile(targetExe, backup);
-    await fs.promises.copyFile(stagedFile, replacement);
-    await fs.promises.rename(targetExe, `${targetExe}.old`);
-    try { await fs.promises.rename(replacement, targetExe); } catch (error) { await fs.promises.rename(`${targetExe}.old`, targetExe).catch(() => {}); throw error; }
-    await fs.promises.unlink(`${targetExe}.old`).catch(() => {});
-    await result("success", `Agent ${version} đã được thay thế an toàn; khởi chạy ${targetExe}`);
-    const child = spawn(targetExe, [], { detached: true, stdio: "ignore", windowsHide: true, cwd: path.dirname(targetExe) });
-    child.unref();
-  } catch (error) {
-    await result("failed", error instanceof Error ? error.message : String(error));
+// Bản portable chạy từ thư mục giải nén tạm (resources bị xóa khi thoát), nên config
+// phải nằm ngoài: ưu tiên cạnh file .exe, nếu thư mục đó không ghi được thì dùng
+// %APPDATA%\HNTH Agent. Lần chạy đầu tiên config được tạo từ bản mẫu đóng gói sẵn.
+// Định danh Agent gắn với thư mục chứa config này (xem register() trong agent.mjs).
+function resolvePackagedConfigPath() {
+  const template = path.join(agentRoot, "config.json");
+  const portableDir = process.env.PORTABLE_EXECUTABLE_DIR || path.dirname(process.execPath);
+  const candidates = [path.join(portableDir, "config.json"), path.join(app.getPath("appData"), "HNTH Agent", "config.json")];
+  const existing = candidates.find((candidate) => fs.existsSync(candidate));
+  if (existing) return existing;
+  for (const candidate of candidates) {
+    try {
+      fs.mkdirSync(path.dirname(candidate), { recursive: true });
+      fs.copyFileSync(template, candidate, fs.constants.COPYFILE_EXCL);
+      return candidate;
+    } catch { /* thử vị trí tiếp theo */ }
   }
+  return template;
 }
 
 function createTrayIcon() {
@@ -78,7 +58,6 @@ async function startAgent() {
   // The packaged executable version is authoritative; keep the persisted
   // config for the existing agent identity and rotated token.
   process.env.HNTH_AGENT_VERSION = app.getVersion();
-  process.env.ELECTRON_RUN_AS_NODE = "1";
   try {
     await import(`file://${agentPath.replaceAll("\\", "/")}`);
     agentStatus = "Đang hoạt động";
@@ -90,17 +69,8 @@ async function startAgent() {
 }
 
 app.whenReady().then(async () => {
-  if (process.argv.includes("--hnth-apply-update")) {
-    await applyUpdate();
-    app.quit();
-    return;
-  }
   app.setAppUserModelId("vn.haiphong.ops.hnth-agent");
-  if (!process.env.HNTH_AGENT_CONFIG && isPackaged) {
-    const portableDir = process.env.PORTABLE_EXECUTABLE_DIR || path.dirname(process.execPath);
-    const externalConfigPath = path.join(portableDir, "config.json");
-    if (fs.existsSync(externalConfigPath)) configPath = externalConfigPath;
-  }
+  if (!process.env.HNTH_AGENT_CONFIG && isPackaged) configPath = resolvePackagedConfigPath();
   tray = new Tray(createTrayIcon());
   tray.setToolTip("Agent HNTH đang chạy");
   updateMenu();

@@ -89,13 +89,14 @@ export function AgentsPanel() {
     try {
       const query = `?version=${encodeURIComponent(releaseVersion.trim())}&fileName=${encodeURIComponent(releaseFile.name)}`;
       const upload = await hnthFetch(`/api/agent-releases${query}`, { method: "POST", headers: { "content-type": "application/octet-stream" }, body: releaseFile });
-      const uploaded = await upload.json().catch(() => ({})) as { sha256?: string; error?: string };
+      const uploaded = await upload.json().catch(() => ({})) as { version?: string; sha256?: string; error?: string };
       if (!upload.ok || !uploaded.sha256) throw new Error(uploaded.error || `Không tải được bản cập nhật (HTTP ${upload.status})`);
-      const backendUrl = String(import.meta.env.VITE_AGENT_BACKEND_URL || "http://127.0.0.1:8788").replace(/\/$/, "");
-      const command = await hnthFetch(`/api/agents/${encodeURIComponent(editing.agentId)}/commands`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ type: "agent-update", version: releaseVersion.trim(), sha256: uploaded.sha256, fileName: releaseFile.name, url: `${backendUrl}/api/agent-releases/${encodeURIComponent(releaseVersion.trim())}?agentId=${encodeURIComponent(editing.agentId)}` }) });
+      // Backend tự điền đường dẫn tải và SHA-256 từ bản release vừa lưu; Agent ghép
+      // đường dẫn đó với backendUrl của chính nó nên không phụ thuộc địa chỉ trình duyệt.
+      const command = await hnthFetch(`/api/agents/${encodeURIComponent(editing.agentId)}/commands`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ type: "agent-update", version: uploaded.version || releaseVersion.trim() }) });
       const payload = await command.json().catch(() => ({})) as { error?: string };
       if (!command.ok) throw new Error(payload.error || `Không gửi được lệnh cập nhật (HTTP ${command.status})`);
-      setReleaseMessage(`Đã gửi bản ${releaseVersion.trim()} cho Agent. Agent sẽ tự thoát, cập nhật và khởi động lại.`);
+      setReleaseMessage(`Đã gửi bản ${releaseVersion.trim()} cho Agent. Agent sẽ tự thoát, cập nhật và khởi động lại; phiên bản mới hiện ở đây sau khoảng 1 phút.`);
       setReleaseFile(null);
     } catch (updateError) { setReleaseMessage(updateError instanceof Error ? updateError.message : "Cập nhật Agent thất bại."); }
     finally { setReleaseBusy(false); }

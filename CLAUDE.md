@@ -72,7 +72,11 @@ Không có test tự động nào. "Xong" nghĩa là tối thiểu `pnpm check` 
 - Đổi schema: thêm `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` vào cuối `migrate()` trong `db.mjs`; không có hệ thống migration riêng.
 - Lệnh tới Agent = INSERT vào `commands`; Agent claim từng lệnh `pending` mỗi 3s. Các loại hợp lệ nằm trong set `allowed` của `POST /api/agents/:id/commands`.
 
-**Agent**: `config.json` cạnh exe là nguồn sự thật (token, agentId, machineId) và bị Agent ghi lại khi nhận `agent-config`. Đổi `machineId` → Agent tự `clone` thành agent mới. Không commit `services/hnth-agent/config.json`.
+**Agent**:
+- `config.json` cạnh exe (hoặc `%APPDATA%\HNTH Agent\`) là nguồn sự thật về token, agentId và installationId. Agent ghi lại file này khi nhận `agent-config` hoặc khi enroll.
+- Định danh = `installationId` (MachineGuid + thư mục chứa config); bảng `agents` có unique index trên cột này. `register` trả 409 khi agentId đã thuộc bản cài khác, khi đó Agent gọi `/api/agents/clone` để lấy id/token riêng.
+- Cập nhật từ xa dùng `src/apply-update.ps1`, không dùng Electron, vì thư mục tạm của bản portable bị xóa khi thoát. **Không** đặt `ELECTRON_RUN_AS_NODE` trong process cha.
+- Không commit `services/hnth-agent/config.json`. Chi tiết luồng xem `services/hnth-agent/README.md`.
 
 **Phong cách code hiện có**: nhiều logic bị nén trên một dòng rất dài (route backend, `UserAdminPanel.tsx`, `auth.ts`). Khi sửa một đoạn, được phép tách dòng đoạn đó cho dễ đọc, nhưng đừng reformat cả file trong cùng thay đổi.
 

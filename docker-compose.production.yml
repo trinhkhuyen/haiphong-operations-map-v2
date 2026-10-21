@@ -32,6 +32,9 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    volumes:
+      # File .exe cập nhật Agent; mất volume thì lệnh agent-update trả 404 khi tải.
+      - agent_releases:/app/services/hnth-backend/agent-releases
     expose:
       - "8788"
     healthcheck:
@@ -63,4 +66,5 @@ volumes:
   postgres_data:
   caddy_data:
   caddy_config:
+  agent_releases:
 

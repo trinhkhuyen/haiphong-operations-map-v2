@@ -143,5 +143,9 @@ export async function migrate() {
   await pool.query(`ALTER TABLE endpoints ADD COLUMN IF NOT EXISTS jitter_ms NUMERIC`);
   await pool.query(`ALTER TABLE monitor_logs ADD COLUMN IF NOT EXISTS packet_loss_pct NUMERIC`);
   await pool.query(`ALTER TABLE monitor_logs ADD COLUMN IF NOT EXISTS jitter_ms NUMERIC`);
+  // Mỗi bản cài Agent (máy + thư mục chứa config) có một installation_id riêng.
+  // Một agent_id chỉ thuộc về đúng một bản cài; bản copy sẽ được cấp id mới.
+  await pool.query(`ALTER TABLE agents ADD COLUMN IF NOT EXISTS installation_id TEXT`);
+  await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS agents_installation_id_key ON agents(installation_id) WHERE installation_id IS NOT NULL`);
   await pool.query(`INSERT INTO monitor_state(id,agent_id) VALUES(1,$1) ON CONFLICT(id) DO NOTHING`, [process.env.HNTH_DEFAULT_AGENT_ID || "agent-demo"]);
 }

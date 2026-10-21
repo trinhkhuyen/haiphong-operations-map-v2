@@ -1,5 +1,6 @@
 appId: vn.haiphong.ops.hnth-agent
-productName: Agent HNTH v0.1.3
+# Giữ productName cố định giữa các phiên bản; version nằm trong package.json/artifactName.
+productName: Agent HNTH
 directories:
   output: ../../outputs/hnth-agent-latest
 files:
