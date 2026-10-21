@@ -1,4 +1,5 @@
 // Chức năng HNTH: live-view công khai (Guest, Trình chiếu) và điều khiển giám sát (Operator).
+import { isIP } from "node:net";
 import { pool } from "../db.mjs";
 import { requireRole } from "../auth.mjs";
 import { AGENT_SUMMARY_COLUMNS, withLiveStatus } from "../services/realtime.mjs";
@@ -53,7 +54,11 @@ export function registerHnthRoutes(router, { realtime }) {
   router.add("POST", "/api/hnth/test", async ({ user, readBody, reply }) => {
     if (!requireRole(user, "operator")) return reply(403, { error: "forbidden" });
     const body = await readBody();
-    await pool.query("INSERT INTO commands(agent_id,type,payload) VALUES($1,'test-point',$2)", [await realtime.selectedAgentId(), JSON.stringify({ pointId: body.pointId, ipAddress: body.ipAddress })]);
+    // Agent đưa ipAddress vào ping.exe: chỉ nhận literal IP (agent cũng tự chặn).
+    const pointId = String(body.pointId || "").trim();
+    const ipAddress = String(body.ipAddress || "").trim();
+    if (!pointId || !isIP(ipAddress)) return reply(400, { error: "pointId and a valid ipAddress are required" });
+    await pool.query("INSERT INTO commands(agent_id,type,payload) VALUES($1,'test-point',$2)", [await realtime.selectedAgentId(), JSON.stringify({ pointId, ipAddress })]);
     return reply(202, { accepted: true });
   });
 

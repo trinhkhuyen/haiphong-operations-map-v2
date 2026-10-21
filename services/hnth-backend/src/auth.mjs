@@ -2,7 +2,7 @@ import crypto from "node:crypto";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { pool } from "./db.mjs";
-import { readCookie } from "./http.mjs";
+import { isSecureRequest, readCookie } from "./http.mjs";
 
 export const ROLE_RANK = { viewer: 1, operator: 2, admin: 3 };
 export const ALL_MENUS = ["layers", "zones", "saved", "routing", "conference", "agents"];
@@ -37,15 +37,17 @@ export function createAuth(config) {
     return result.rowCount > 0 && result.rows[0].token_hash === hash(value.slice(7));
   }
 
-  /** Tạo refresh token mới (lưu hash), trả giá trị Set-Cookie. */
-  async function issueRefreshCookie(userId) {
+  const secureFlag = (req) => (config.cookieSecure === "auto" ? isSecureRequest(req, config.trustProxy) : config.cookieSecure) ? "; Secure" : "";
+
+  /** Tạo refresh token mới (lưu hash), trả giá trị Set-Cookie (Secure khi request là HTTPS). */
+  async function issueRefreshCookie(userId, req) {
     const raw = crypto.randomBytes(48).toString("hex");
     await pool.query("INSERT INTO refresh_tokens(user_id,token_hash,expires_at) VALUES($1,$2,now()+interval '30 days')", [userId, hash(raw)]);
-    return `${REFRESH_COOKIE}=${raw}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${REFRESH_MAX_AGE_SECONDS}`;
+    return `${REFRESH_COOKIE}=${raw}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${REFRESH_MAX_AGE_SECONDS}${secureFlag(req)}`;
   }
 
   const readRefreshToken = (req) => readCookie(req, REFRESH_COOKIE);
-  const clearedRefreshCookie = `${REFRESH_COOKIE}=; HttpOnly; Path=/; Max-Age=0`;
+  const clearedRefreshCookie = (req) => `${REFRESH_COOKIE}=; HttpOnly; Path=/; Max-Age=0${secureFlag(req)}`;
 
   async function seedAdmin() {
     const found = await pool.query("SELECT id FROM users WHERE username=$1", [config.adminUsername]);

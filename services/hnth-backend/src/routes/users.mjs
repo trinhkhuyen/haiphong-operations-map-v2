@@ -38,6 +38,7 @@ export function registerUserRoutes(router) {
     if (params.id === user.id && body.isActive === false) return reply(400, { error: "cannot deactivate current user" });
     const displayName = String(body.displayName || "").trim();
     if (!displayName) return reply(400, { error: "displayName is required" });
+    if (body.password && String(body.password).length < 8) return reply(400, { error: "password must be at least 8 characters" });
     const result = await pool.query(`UPDATE users SET display_name=$1,role=$2,department=$3,phone=$4,menu_permissions=$5,is_active=$6,updated_at=now() WHERE id=$7 RETURNING ${USER_COLUMNS}`, [displayName, role, String(body.department || "").trim(), String(body.phone || "").trim(), JSON.stringify(normalizeMenus(body.menuPermissions)), body.isActive !== false, params.id]);
     if (!result.rowCount) return reply(404, { error: "user not found" });
     if (body.password) await pool.query("UPDATE users SET password_hash=$1,updated_at=now() WHERE id=$2", [await bcrypt.hash(String(body.password), 12), params.id]);

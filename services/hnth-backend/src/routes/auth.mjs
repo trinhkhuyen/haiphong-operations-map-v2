@@ -1,14 +1,23 @@
 import bcrypt from "bcryptjs";
 import { pool } from "../db.mjs";
 import { hash, userView } from "../auth.mjs";
+import { clientIp } from "../http.mjs";
+import { createLoginLimiter } from "../services/login-limiter.mjs";
 
-export function registerAuthRoutes(router, { auth }) {
-  router.add("POST", "/api/auth/login", async ({ readBody, reply }) => {
+export function registerAuthRoutes(router, { auth, config, loginLimiter = createLoginLimiter() }) {
+  router.add("POST", "/api/auth/login", async ({ req, readBody, reply }) => {
     const body = await readBody();
+    const ip = clientIp(req, config.trustProxy);
+    const gate = loginLimiter.check(ip, body.username);
+    if (!gate.allowed) return reply(429, { error: "too many login attempts" }, { "retry-after": String(gate.retryAfterSeconds) });
     const result = await pool.query("SELECT * FROM users WHERE username=$1 AND is_active=true", [body.username]);
     const user = result.rows[0];
-    if (!user || !(await bcrypt.compare(String(body.password || ""), user.password_hash))) return reply(401, { error: "invalid credentials" });
-    return reply(200, { accessToken: auth.signAccessToken(user), user: userView(user) }, { "set-cookie": await auth.issueRefreshCookie(user.id) });
+    if (!user || !(await bcrypt.compare(String(body.password || ""), user.password_hash))) {
+      loginLimiter.recordFailure(ip, body.username);
+      return reply(401, { error: "invalid credentials" });
+    }
+    loginLimiter.recordSuccess(ip, body.username);
+    return reply(200, { accessToken: auth.signAccessToken(user), user: userView(user) }, { "set-cookie": await auth.issueRefreshCookie(user.id, req) });
   }, { public: true });
 
   // Xoay vòng: refresh token cũ bị thu hồi, cấp token mới.
@@ -19,13 +28,13 @@ export function registerAuthRoutes(router, { auth }) {
     const user = result.rows[0];
     if (!user) return reply(401, { error: "invalid refresh" });
     await pool.query("UPDATE refresh_tokens SET revoked_at=now() WHERE token_hash=$1", [hash(raw)]);
-    return reply(200, { accessToken: auth.signAccessToken(user), user: userView(user) }, { "set-cookie": await auth.issueRefreshCookie(user.id) });
+    return reply(200, { accessToken: auth.signAccessToken(user), user: userView(user) }, { "set-cookie": await auth.issueRefreshCookie(user.id, req) });
   }, { public: true });
 
   router.add("POST", "/api/auth/logout", async ({ req, reply }) => {
     const raw = auth.readRefreshToken(req);
     if (raw) await pool.query("UPDATE refresh_tokens SET revoked_at=now() WHERE token_hash=$1", [hash(raw)]);
-    return reply(200, { ok: true }, { "set-cookie": auth.clearedRefreshCookie });
+    return reply(200, { ok: true }, { "set-cookie": auth.clearedRefreshCookie(req) });
   }, { public: true });
 
   router.add("GET", "/api/auth/me", async ({ user, reply }) => reply(200, userView(user)));

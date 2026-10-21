@@ -183,4 +183,28 @@ describe("hnth-backend e2e", { skip: skipReason }, () => {
     assert.equal(results.find((row) => row.pointId === "hnth-e2e-empty").status, "unknown");
     assert.equal(results.find((row) => row.pointId === "hnth-e2e-2").status, "offline");
   });
+
+  it("9. bảo mật: giới hạn đăng nhập, kiểm tra đầu vào, lỗi 500 không lộ chi tiết", async () => {
+    // Tài khoản không tồn tại: không khóa admin của các test khác.
+    for (let i = 0; i < 5; i++) assert.equal((await api("POST", "/api/auth/login", { body: { username: "e2e-locked", password: "wrong" } })).status, 401);
+    const blocked = await api("POST", "/api/auth/login", { body: { username: "e2e-locked", password: "wrong" } });
+    assert.equal(blocked.status, 429);
+    assert.ok(Number(blocked.headers.get("retry-after")) > 0);
+
+    const login = await api("POST", "/api/auth/login", { body: ADMIN });
+    assert.equal(login.status, 200);
+    assert.doesNotMatch(login.headers.get("set-cookie"), /Secure/, "http trực tiếp, không qua proxy HTTPS");
+
+    const viewer = (await api("GET", "/api/users", { token: adminToken })).body.find((item) => item.username === "viewer1");
+    assert.equal((await api("PUT", `/api/users/${viewer.id}`, { token: adminToken, body: { displayName: "Viewer", role: "viewer", password: "short" } })).status, 400);
+
+    assert.equal((await api("POST", "/api/hnth/test", { token: adminToken, body: { pointId: "hnth-e2e-1", ipAddress: "-t 127.0.0.1" } })).status, 400);
+    assert.equal((await api("POST", "/api/hnth/test", { token: adminToken, body: { pointId: "hnth-e2e-1", ipAddress: "127.0.0.1" } })).status, 202);
+
+    const failed = await api("POST", "/api/telemetry/ping-results", { token: AGENT_TOKEN, body: { agentId: "agent-a", results: [{ pointId: "hnth-e2e-bad", ipAddress: "not-an-ip", status: "online" }] } });
+    assert.equal(failed.status, 500);
+    assert.deepEqual(failed.body, { error: "internal error" });
+
+    assert.deepEqual((await db.query("SELECT version,name FROM schema_migrations ORDER BY version")).rows, [{ version: 1, name: "baseline" }]);
+  });
 });

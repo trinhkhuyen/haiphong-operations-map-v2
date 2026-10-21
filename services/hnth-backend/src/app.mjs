@@ -45,7 +45,10 @@ export function createApp(config) {
       return await match.route.handler({ req, res, url, params: match.params, user, reply, corsOrigin: origin, readBody: () => readJson(req) });
     } catch (error) {
       console.error(error);
-      return reply(error.message === "invalid json" ? 400 : 500, { error: error.message });
+      // Không trả nguyên error.message (có thể lộ câu SQL, tên bảng, đường dẫn file).
+      if (error.message === "invalid json") return reply(400, { error: "invalid json" });
+      if (error.message === "body too large") return reply(413, { error: "body too large" });
+      return reply(500, { error: "internal error" });
     }
   }
 

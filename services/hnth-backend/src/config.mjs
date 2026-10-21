@@ -21,5 +21,11 @@ export function loadConfig(env = process.env) {
     adminPassword: env.ADMIN_PASSWORD || "admin123!",
     webOrigins: (env.WEB_ORIGIN || "http://127.0.0.1:5173").split(",").map((origin) => origin.trim()).filter(Boolean),
     releaseDir: path.resolve(env.HNTH_RELEASE_DIR || path.join(process.cwd(), "agent-releases")),
+    // Docker production đặt backend sau Caddy (chỉ `expose`), nên mặc định tin
+    // X-Forwarded-For/-Proto ở production. Dev chạy trực tiếp thì không.
+    trustProxy: env.TRUST_PROXY ? env.TRUST_PROXY === "true" : production,
+    // Cookie refresh có cờ Secure: "auto" = theo từng request (HTTPS mới đặt), vì bản
+    // demo LAN chạy production qua http://IP và cookie Secure sẽ không được gửi lại.
+    cookieSecure: ["true", "false"].includes(env.COOKIE_SECURE) ? env.COOKIE_SECURE === "true" : "auto",
   };
 }

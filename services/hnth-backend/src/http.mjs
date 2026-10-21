@@ -35,6 +35,21 @@ export function readJson(req) {
   });
 }
 
+/**
+ * IP của client. Sau reverse proxy (Caddy) chỉ tin X-Forwarded-For khi trustProxy,
+ * vì nếu backend lộ cổng trực tiếp, client tự đặt được header này.
+ */
+export function clientIp(req, trustProxy) {
+  const forwarded = trustProxy ? String(req.headers["x-forwarded-for"] || "").split(",")[0].trim() : "";
+  return forwarded || req.socket?.remoteAddress || "unknown";
+}
+
+/** Request đi tới qua HTTPS (trực tiếp, hoặc proxy báo X-Forwarded-Proto khi trustProxy). */
+export function isSecureRequest(req, trustProxy) {
+  if (req.socket?.encrypted) return true;
+  return trustProxy && String(req.headers["x-forwarded-proto"] || "").split(",")[0].trim() === "https";
+}
+
 export function readCookie(req, name) {
   const match = String(req.headers.cookie || "").match(new RegExp(`(?:^|;)\\s*${name}=([^;]+)`));
   return match?.[1];
