@@ -85,7 +85,7 @@ Không có test tự động nào. "Xong" nghĩa là tối thiểu `pnpm check` 
 
 ## Nợ kỹ thuật đã biết (chưa xử lý — hỏi trước khi sửa)
 
-1. **Bảo mật repo**: `.codex_tmp/` (~2.600 file Chrome profile) bị commit ở `d176a3d` và đã push. Đã `git rm -r --cached` (2026-10-21, chờ commit); lịch sử GitHub vẫn còn — cần `git filter-repo --path .codex_tmp --invert-paths` + force-push. Mức lộ thấp: không có mật khẩu lưu, cookie chỉ của `*.chatgpt.site` (mã hóa DPAPI theo user Windows).
+1. **Repo cũ**: từ 2026-10-21 làm việc trên `origin` = `trinhkhuyen/haiphong-operations-map-v2` (lịch sử sạch, bắt đầu từ `d8337c4`). Repo cũ `haiphong-operations-map` (remote `legacy`, nhánh cục bộ `legacy-main`) vẫn chứa `.codex_tmp/` (Chrome profile, mức lộ thấp: không mật khẩu, cookie chỉ của `*.chatgpt.site`) — nên archive hoặc xóa trên GitHub. Không merge/cherry-pick từ `legacy-main` sang `main`.
 2. Backend: không rate-limit `/api/auth/login`; cookie refresh thiếu `Secure`; `JWT_SECRET`/`HNTH_AGENT_TOKEN` có giá trị fallback cứng nếu thiếu env; `json()` không truyền `req` ở nhiều route nên CORS trả về origin đầu tiên; message lỗi 500 trả nguyên `error.message`.
 3. Agent: lệnh `test-point` chuyển `ipAddress` chưa kiểm tra thẳng vào `ping.exe` (không qua shell, nhưng có thể chèn tham số như `-t`).
 4. Web: `UserAdminPanel` reset mật khẩu về chuỗi cứng; `xlsx@0.18.5` (bản npm đã ngừng, có CVE); `MapCanvas.tsx` ~2.900 dòng; bundle `index`/`map` >900 kB.
