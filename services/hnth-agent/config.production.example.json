@@ -1,0 +1,10 @@
+{
+  "agentId": "agent-demo",
+  "agentName": "HNTH Hải Phòng",
+  "backendUrl": "https://map.example.vn",
+  "token": "change_this_agent_token",
+  "heartbeatSeconds": 30,
+  "monitorIntervalSeconds": 30,
+  "scanSubnets": ["192.168.1.0/24"]
+}
+

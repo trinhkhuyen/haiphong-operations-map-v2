@@ -1,0 +1,78 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-hnth}
+      POSTGRES_USER: ${POSTGRES_USER:-hnth}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-hnth_source_password}
+    volumes:
+      - hnth_source_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-hnth} -d ${POSTGRES_DB:-hnth}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  backend:
+    image: hnth-source-docker-bundle-backend:latest
+    build:
+      context: .
+      dockerfile: Dockerfile.source-dev
+    restart: unless-stopped
+    working_dir: /workspace
+    command: sh -lc "if [ ! -f /workspace/services/hnth-backend/node_modules/.modules.yaml ]; then pnpm install --frozen-lockfile --prefer-offline; fi; pnpm --filter @haiphong-ops/hnth-backend dev"
+    environment:
+      CI: "true"
+      PORT: 8788
+      DATABASE_URL: postgresql://${POSTGRES_USER:-hnth}:${POSTGRES_PASSWORD:-hnth_source_password}@postgres:5432/${POSTGRES_DB:-hnth}
+      JWT_SECRET: ${JWT_SECRET:-change-this-source-jwt-secret}
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin123}
+      HNTH_AGENT_TOKEN: ${HNTH_AGENT_TOKEN:-change-this-agent-token}
+      HNTH_DEFAULT_AGENT_ID: ${HNTH_DEFAULT_AGENT_ID:-agent-demo}
+      WEB_ORIGIN: http://localhost:5173,http://127.0.0.1:5173
+    volumes:
+      - .:/workspace
+      - hnth_source_node_modules:/workspace/node_modules
+      - hnth_source_backend_node_modules:/workspace/services/hnth-backend/node_modules
+    ports:
+      - "8788:8788"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8788/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  frontend:
+    image: hnth-source-docker-bundle-frontend:latest
+    build:
+      context: .
+      dockerfile: Dockerfile.source-dev
+    restart: unless-stopped
+    working_dir: /workspace
+    command: sh -lc "if [ ! -f /workspace/apps/web/node_modules/.modules.yaml ]; then pnpm install --frozen-lockfile --prefer-offline; fi; pnpm --filter @haiphong-ops/web dev --host 0.0.0.0"
+    environment:
+      CI: "true"
+      # Use same-origin /api calls so phones do not resolve localhost to themselves.
+      VITE_HNTH_BACKEND_URL: ${VITE_HNTH_BACKEND_URL:-}
+      VITE_PROXY_TARGET: http://backend:8788
+    volumes:
+      - .:/workspace
+      - hnth_source_node_modules:/workspace/node_modules
+      - hnth_source_web_node_modules:/workspace/apps/web/node_modules
+    ports:
+      - "5173:5173"
+    depends_on:
+      backend:
+        condition: service_healthy
+
+volumes:
+  hnth_source_postgres_data:
+  hnth_source_node_modules:
+  hnth_source_backend_node_modules:
+  hnth_source_web_node_modules:
+

@@ -1,0 +1,21 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "web-running",
+      "url": "http://127.0.0.1:5173"
+    },
+    {
+      "name": "web",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--filter", "@haiphong-ops/web", "dev"],
+      "port": 5173
+    },
+    {
+      "name": "stack-docker",
+      "runtimeExecutable": "docker",
+      "runtimeArgs": ["compose", "--env-file", ".env.source", "-f", "docker-compose.source.yml", "up", "--build"],
+      "port": 5173
+    }
+  ]
+}

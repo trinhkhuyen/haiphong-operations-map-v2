@@ -1,0 +1,20 @@
+Add-Type -AssemblyName System.Drawing
+$size = 64
+$bitmap = New-Object System.Drawing.Bitmap($size, $size)
+$graphics = [System.Drawing.Graphics]::FromImage($bitmap)
+$graphics.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
+$graphics.Clear([System.Drawing.Color]::FromArgb(18,49,58))
+$border = New-Object System.Drawing.Pen([System.Drawing.Color]::FromArgb(45,212,191), 3)
+$stroke = New-Object System.Drawing.Pen([System.Drawing.Color]::FromArgb(103,232,211), 3)
+$graphics.DrawRectangle($border, 2, 2, 60, 60)
+$graphics.DrawLine($stroke, 32, 12, 32, 46)
+$graphics.DrawLine($stroke, 23, 52, 41, 52)
+$graphics.DrawLine($stroke, 27, 46, 21, 54)
+$graphics.DrawLine($stroke, 37, 46, 43, 54)
+$graphics.DrawEllipse($stroke, 29, 9, 6, 6)
+$graphics.DrawArc($stroke, 8, 9, 32, 32, 210, 70)
+$graphics.DrawArc($stroke, 24, 9, 32, 32, -100, 70)
+$graphics.DrawArc($stroke, -1, 3, 56, 56, 210, 70)
+$graphics.DrawArc($stroke, 9, 3, 56, 56, -100, 70)
+$bitmap.Save((Join-Path $PSScriptRoot 'hnth-agent.png'), [System.Drawing.Imaging.ImageFormat]::Png)
+$graphics.Dispose(); $border.Dispose(); $stroke.Dispose(); $bitmap.Dispose()

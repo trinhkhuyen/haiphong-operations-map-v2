@@ -1,0 +1,29 @@
+// Keep API calls same-origin when no explicit backend URL is configured.
+// This is required for phones: their own 127.0.0.1 is the phone, not the PC.
+const base = ((import.meta.env.VITE_HNTH_BACKEND_URL as string | undefined) || "").replace(/\/$/, "");
+// In production the frontend and backend are served behind the same origin.
+// An empty VITE_HNTH_BACKEND_URL therefore still means that the backend is available
+// through relative `/api/*` URLs and must not disable session refresh.
+export const backendEnabled = true;
+export type AuthUser = { id: string; username: string; displayName: string; role: "admin" | "operator" | "viewer"; department?: string; phone?: string; menuPermissions?: string[] };
+let accessToken = sessionStorage.getItem("hnth_access_token") || "";
+let currentUser: AuthUser | null = JSON.parse(sessionStorage.getItem("hnth_user") || "null");
+export function getAccessToken() { return accessToken; }
+export function getCurrentUser() { return currentUser; }
+export function setCurrentUser(user: AuthUser | null) { currentUser = user; if (user) sessionStorage.setItem("hnth_user", JSON.stringify(user)); else sessionStorage.removeItem("hnth_user"); }
+export function clearAccessToken() { accessToken = ""; sessionStorage.removeItem("hnth_access_token"); setCurrentUser(null); }
+export async function login(username: string, password: string) {
+  const response = await fetch(`${base}/api/auth/login`, { method: "POST", credentials: "include", headers: { "content-type": "application/json" }, body: JSON.stringify({ username, password }) });
+  if (!response.ok) throw new Error("Tên đăng nhập hoặc mật khẩu không đúng");
+  const payload = await response.json() as { accessToken: string; user: AuthUser };
+  accessToken = payload.accessToken; sessionStorage.setItem("hnth_access_token", accessToken); setCurrentUser(payload.user); return payload;
+}
+export async function refresh() {
+  const response = await fetch(`${base}/api/auth/refresh`, { method: "POST", credentials: "include" });
+  if (!response.ok) return false;
+  const payload = await response.json() as { accessToken: string; user?: AuthUser };
+  accessToken = payload.accessToken; sessionStorage.setItem("hnth_access_token", accessToken); if (payload.user) setCurrentUser(payload.user); return true;
+}
+export async function logout() { await fetch(`${base}/api/auth/logout`, { method: "POST", credentials: "include", headers: accessToken ? { authorization: `Bearer ${accessToken}` } : undefined }); clearAccessToken(); }
+export async function changePassword(currentPassword: string, newPassword: string) { const response = await fetch(`${base}/api/auth/change-password`, { method: "POST", credentials: "include", headers: { "content-type": "application/json", ...(accessToken ? { authorization: `Bearer ${accessToken}` } : {}) }, body: JSON.stringify({ currentPassword, newPassword }) }); if (!response.ok) { const body = await response.json().catch(() => ({})); throw new Error(body.error || "Không đổi được mật khẩu"); } }
+export async function updateProfile(profile: { displayName: string; department: string; phone: string }) { const response = await fetch(`${base}/api/auth/profile`, { method: "PUT", credentials: "include", headers: { "content-type": "application/json", ...(accessToken ? { authorization: `Bearer ${accessToken}` } : {}) }, body: JSON.stringify(profile) }); const body = await response.json().catch(() => ({})); if (!response.ok) throw new Error(body.error || "Không cập nhật được thông tin"); setCurrentUser(body.user); return body.user as AuthUser; }

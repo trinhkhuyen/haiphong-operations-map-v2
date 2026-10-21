@@ -1,0 +1,12 @@
+node_modules
+**/node_modules
+dist
+**/dist
+.git
+.codex_tmp
+.openai
+*.log
+services/hnth-agent/config.json
+apps/web/.git-sites-backup
+outputs
+

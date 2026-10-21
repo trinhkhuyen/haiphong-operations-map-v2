@@ -1,0 +1,13 @@
+{
+  "name": "haiphong-ops-map",
+  "private": true,
+  "packageManager": "pnpm@11.25.0",
+  "scripts": {
+    "dev": "pnpm --filter @haiphong-ops/web dev",
+    "build": "pnpm --filter @haiphong-ops/web build",
+    "typecheck": "pnpm --filter @haiphong-ops/web typecheck",
+    "check": "node scripts/check.mjs",
+    "check:full": "node scripts/check.mjs --build",
+    "smoke:backend": "node scripts/smoke-backend.mjs"
+  }
+}

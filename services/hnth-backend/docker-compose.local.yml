@@ -1,0 +1,16 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: hnth-postgres-local
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: hnth
+      POSTGRES_USER: hnth
+      POSTGRES_PASSWORD: hnth_local_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - hnth_postgres_data:/var/lib/postgresql/data
+
+volumes:
+  hnth_postgres_data:
