@@ -35,10 +35,10 @@ jobs:
       E2E_DATABASE_URL: postgres://hnth:hnth_ci_password@127.0.0.1:5432/hnth
       E2E_REQUIRE_DB: "1"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       # Phiên bản pnpm lấy từ "packageManager" trong package.json.
       - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: pnpm
