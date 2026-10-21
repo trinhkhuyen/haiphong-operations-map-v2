@@ -50,7 +50,7 @@ export function registerAgentRoutes(router, { config }) {
     const type = String(body.type || "");
     if (!OPERATOR_COMMAND_TYPES.includes(type)) return reply(400, { error: "unsupported command" });
     if (type === "agent-update" && !requireRole(user, "admin")) return reply(403, { error: "admin required for agent updates" });
-    let { type: ignored, ...payload } = body;
+    let { type: _type, ...payload } = body;
     if (type === "agent-update") {
       // Lệnh cập nhật lấy file/SHA-256 từ bản release đã lưu, không tin URL do trình duyệt
       // gửi lên. `path` là đường dẫn tương đối: Agent tự ghép với backendUrl của chính nó,

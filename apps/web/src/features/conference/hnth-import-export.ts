@@ -29,7 +29,7 @@ export function parseCsv(text: string): string[][] {
 }
 
 function normalizeCsvHeader(value: string) {
-  return value.replace(/^﻿/, "").trim().toLocaleLowerCase("vi").normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[đĐ]/g, "d").replace(/[\s_/-]+/g, "");
+  return value.replace(/^\uFEFF/, "").trim().toLocaleLowerCase("vi").normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[đĐ]/g, "d").replace(/[\s_/-]+/g, "");
 }
 
 export function parseHnthCsv(text: string): HnthImportRow[] {

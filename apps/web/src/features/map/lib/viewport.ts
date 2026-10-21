@@ -1,5 +1,4 @@
 // Khung nhìn: tổng quan Hải Phòng, Home trên mobile, giới hạn kéo bản đồ.
-import { Home } from "lucide-react";
 import type { Map as MapLibreMap } from "maplibre-gl";
 import { bbox, booleanPointInPolygon, feature, point } from "@turf/turf";
 import type { MultiPolygon, Polygon } from "geojson";

@@ -1,0 +1,51 @@
+# Kiểm tra mỗi lần push lên main và mỗi pull request: lint, typecheck, build,
+# unit test (web, protocol, backend, agent) và e2e backend + agent trên Postgres.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: hnth
+          POSTGRES_USER: hnth
+          POSTGRES_PASSWORD: hnth_ci_password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U hnth -d hnth"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      # Agent Electron không cần cho kiểm tra; bỏ tải binary ~100 MB.
+      ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
+      E2E_DATABASE_URL: postgres://hnth:hnth_ci_password@127.0.0.1:5432/hnth
+      E2E_REQUIRE_DB: "1"
+    steps:
+      - uses: actions/checkout@v4
+      # Phiên bản pnpm lấy từ "packageManager" trong package.json.
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Lint, typecheck, cú pháp Node, build production
+        run: node scripts/check.mjs --build
+      - name: Unit test
+        run: pnpm test
+      - name: E2E backend + agent
+        run: pnpm test:e2e

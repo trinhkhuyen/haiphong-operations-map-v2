@@ -1,6 +1,6 @@
 // Thẻ thông tin cố định trên bản đồ (địa giới, điểm HNTH).
 import { Cable, FileText, X, Zap } from "lucide-react";
-import { area as turfArea, feature, point } from "@turf/turf";
+import { area as turfArea, feature } from "@turf/turf";
 import { useAppStore } from "../../core/store";
 import type { AdministrativeUnit } from "../../core/types";
 import { HNTH_STATUS_LABELS, normalizeHnthStatus, type HnthConnectionStatus } from "../layers/hnth-data-provider";

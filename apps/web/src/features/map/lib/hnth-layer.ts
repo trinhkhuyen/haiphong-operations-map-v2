@@ -1,7 +1,5 @@
 // Lớp HNTH: điểm, đường nối, tô địa giới theo trạng thái; đồng bộ feature-state không dựng lại source.
 import maplibregl, { type GeoJSONSource, type Map as MapLibreMap } from "maplibre-gl";
-import { circle, feature, point } from "@turf/turf";
-import type { Feature } from "geojson";
 import { useAppStore } from "../../../core/store";
 import type { OperationalLayer } from "../../../core/types";
 import { HNTH_LAYER_ID, normalizeHnthStatus, type HnthConnectionStatus, type HnthStatusStyles } from "../../layers/hnth-data-provider";

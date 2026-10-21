@@ -1,6 +1,5 @@
 // Hiển thị lựa chọn địa giới: viền kiểm tra, vùng đã khoanh/focus, nền tối, màu khoanh.
 import { useEffect } from "react";
-import { Home } from "lucide-react";
 import maplibregl, { type GeoJSONSource } from "maplibre-gl";
 import { bbox, featureCollection } from "@turf/turf";
 import { useAppStore } from "../../../core/store";
@@ -11,7 +10,6 @@ import type { MapInspection } from "./useMapInspection";
 
 export function useAdministrativeSelection(context: MapScope & MapInspection) {
   const { mapRef, isHomeTransitionActiveRef, suppressNextAdministrativeSelectionFitRef, isMapReady, inspectedAdministrativeIds, fixedMapInfo, setFixedMapInfo, refreshZoneSummary, clearMapInspection } = context;
-  const layers = useAppStore((state) => state.layers);
   const administrativeUnits = useAppStore((state) => state.administrativeUnits);
   const selectedAdministrativeIds = useAppStore((state) => state.selectedAdministrativeIds);
   const focusedAdministrativeId = useAppStore((state) => state.focusedAdministrativeId);

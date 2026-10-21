@@ -1,7 +1,7 @@
 // Thêm source/layer địa giới (nền, viền, nhãn, nền tối) và tương tác click/hover.
 import { useEffect } from "react";
 import type { GeoJSONSource } from "maplibre-gl";
-import { bbox, circle, featureCollection, point } from "@turf/turf";
+import { bbox, featureCollection } from "@turf/turf";
 import type { MultiPolygon, Polygon } from "geojson";
 import { useAppStore } from "../../../core/store";
 import { unitsToFeatureCollection } from "../../administrative/data-provider";
@@ -14,7 +14,6 @@ import type { MapScope } from "./useMapScope";
 
 export function useAdministrativeLayers(context: MapScope) {
   const { mapRef, suppressNextAdministrativeSelectionFitRef, isMapReady, setInspectedAdministrativeId, setInspectedAdministrativeIds, setFixedMapInfo } = context;
-  const layers = useAppStore((state) => state.layers);
   const administrativeUnits = useAppStore((state) => state.administrativeUnits);
   useEffect(() => {
     const map = mapRef.current;

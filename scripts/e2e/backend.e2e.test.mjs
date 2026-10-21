@@ -17,6 +17,8 @@ const schema = `hnth_e2e_${process.pid}`;
 const admin = new pg.Client({ connectionString: DATABASE_URL });
 let skipReason = false;
 try { await admin.connect(); } catch (error) { skipReason = `Không kết nối được Postgres (${DATABASE_URL.replace(/:[^:@/]+@/, ":***@")}): ${error.message}`; }
+// CI đặt E2E_REQUIRE_DB=1: thiếu Postgres là lỗi, không được skip âm thầm.
+if (skipReason && process.env.E2E_REQUIRE_DB) throw new Error(skipReason);
 
 describe("hnth-backend e2e", { skip: skipReason }, () => {
   const tmp = mkdtempSync(path.join(os.tmpdir(), "hnth-e2e-"));

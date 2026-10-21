@@ -1,6 +1,5 @@
 // Đồng bộ kiểu hiển thị lớp HNTH (line/điểm/tô địa giới theo trạng thái).
 import { useEffect } from "react";
-import { feature } from "@turf/turf";
 import { useAppStore } from "../../../core/store";
 import { HNTH_LAYER_ID } from "../../layers/hnth-data-provider";
 import { syncHnthVisualStyles } from "../lib/hnth-layer";

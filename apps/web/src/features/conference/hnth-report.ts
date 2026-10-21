@@ -44,7 +44,7 @@ function buildImagePdf(pages: Array<{ dataUrl: string; width: number; height: nu
   const pageContentNumbers: number[] = [];
   const imageObjectNumbers: number[] = [];
   let nextObject = 4;
-  for (const page of pages) {
+  for (const _page of pages) {
     imageObjectNumbers.push(nextObject++);
     pageObjectNumbers.push(nextObject++);
     pageContentNumbers.push(nextObject++);

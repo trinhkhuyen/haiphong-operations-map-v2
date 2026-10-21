@@ -6,10 +6,18 @@
     "dev": "pnpm --filter @haiphong-ops/web dev",
     "build": "pnpm --filter @haiphong-ops/web build",
     "typecheck": "pnpm --filter @haiphong-ops/web typecheck",
+    "lint": "eslint .",
     "check": "node scripts/check.mjs",
     "check:full": "node scripts/check.mjs --build --test",
     "test": "pnpm --filter @haiphong-ops/web test && pnpm --filter @haiphong-ops/hnth-protocol test && pnpm --filter @haiphong-ops/hnth-backend test && pnpm --filter @haiphong-ops/hnth-agent test",
     "test:e2e": "node --test \"scripts/e2e/*.test.mjs\"",
     "smoke:backend": "node scripts/smoke-backend.mjs"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.5",
+    "eslint": "^9.39.5",
+    "eslint-plugin-react-hooks": "^5.2.0",
+    "globals": "^15.15.0",
+    "typescript-eslint": "^8.72.0"
   }
 }

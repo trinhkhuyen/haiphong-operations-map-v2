@@ -1,5 +1,4 @@
 // Lớp địa giới hành chính: nhãn tên chính thức, nền tối ngoài Hải Phòng, đường nối tới UBND.
-import { X } from "lucide-react";
 import type { GeoJSONSource, Map as MapLibreMap } from "maplibre-gl";
 import { feature, featureCollection, point, union } from "@turf/turf";
 import type { Feature, MultiPolygon, Point as GeoJSONPoint, Polygon } from "geojson";

@@ -1,7 +1,6 @@
 // Dựng MapLibre + Terra Draw một lần, gắn click/phím toàn cục; đổi nền bản đồ.
 import { useEffect } from "react";
 import maplibregl from "maplibre-gl";
-import { circle, feature } from "@turf/turf";
 import { TerraDraw, TerraDrawCircleMode, TerraDrawLineStringMode, TerraDrawPolygonMode, TerraDrawRectangleMode, TerraDrawSelectMode } from "terra-draw";
 import { TerraDrawMapLibreGLAdapter } from "terra-draw-maplibre-gl-adapter";
 import { useAppStore } from "../../../core/store";
@@ -16,7 +15,6 @@ import type { MapInspection } from "./useMapInspection";
 
 export function useMapInstance(context: MapScope & MapInspection) {
   const { containerRef, mapRef, drawRef, radiusMarkersRef, drawEditMarkersRef, textMarkersRef, iconMarkersRef, drawSearchMarkerRef, vietnamProvinceLabelMarkersRef, homeTransitionTimeoutRef, isHomeTransitionActiveRef, isSyncingSavedFeaturesRef, isMapReady, setIsMapReady, setIsInitialRegionalMapReady, setIsDrawReady, refreshZoneSummary, clearMapInspection } = context;
-  const layers = useAppStore((state) => state.layers);
   const baseMapMode = useAppStore((state) => state.baseMapMode);
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;

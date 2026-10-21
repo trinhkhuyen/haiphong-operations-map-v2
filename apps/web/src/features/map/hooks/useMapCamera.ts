@@ -1,6 +1,5 @@
 // Camera: Home, tổng quan Hải Phòng, khung nhìn mặc định khi mở trang, phím tắt, tìm địa điểm.
 import { useCallback, useEffect } from "react";
-import { Home } from "lucide-react";
 import maplibregl from "maplibre-gl";
 import { bbox } from "@turf/turf";
 import { useAppStore } from "../../../core/store";

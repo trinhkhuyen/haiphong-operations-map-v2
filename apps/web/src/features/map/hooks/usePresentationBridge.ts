@@ -1,7 +1,5 @@
 // Chụp nền bản đồ cho báo cáo và hình học đã chiếu cho cửa sổ trình chiếu.
 import { useEffect } from "react";
-import { point } from "@turf/turf";
-import type { MultiPolygon, Polygon } from "geojson";
 import { useAppStore } from "../../../core/store";
 import { HNTH_LAYER_ID } from "../../layers/hnth-data-provider";
 import { onAppEvent } from "../../../core/events";

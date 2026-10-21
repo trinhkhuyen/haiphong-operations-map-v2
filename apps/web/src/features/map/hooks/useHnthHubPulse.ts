@@ -1,7 +1,6 @@
 // Vòng nhịp tại Trung tâm khi đang Giám sát liên tục và agent online (menu HNTH).
 import { useEffect } from "react";
 import maplibregl from "maplibre-gl";
-import { feature } from "@turf/turf";
 import { useAppStore } from "../../../core/store";
 import { HNTH_LAYER_ID } from "../../layers/hnth-data-provider";
 import { useHnthLiveStore } from "../../../core/realtime/hnth-live-store";

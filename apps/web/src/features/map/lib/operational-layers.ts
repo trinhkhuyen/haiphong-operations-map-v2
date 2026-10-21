@@ -1,6 +1,6 @@
 // Lớp dữ liệu vận hành (camera, UBND, OSM...): thêm/ẩn/xếp lớp, gom cụm, popup.
 import maplibregl, { type Map as MapLibreMap } from "maplibre-gl";
-import { booleanPointInPolygon, circle, feature, point } from "@turf/turf";
+import { booleanPointInPolygon, feature } from "@turf/turf";
 import type { Feature, MultiPolygon, Point as GeoJSONPoint, Polygon } from "geojson";
 import { useAppStore } from "../../../core/store";
 import type { AdministrativeUnit, OperationalLayer } from "../../../core/types";

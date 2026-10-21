@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Kiểm tra nhanh toàn bộ workspace trước khi coi một thay đổi là xong.
-//   node scripts/check.mjs          -> typecheck web + kiểm tra cú pháp các service Node
+//   node scripts/check.mjs          -> eslint + typecheck web + kiểm tra cú pháp các service Node
 //   node scripts/check.mjs --build  -> thêm vite build production
 //   node scripts/check.mjs --test   -> thêm unit test web (vitest)
 import { spawnSync } from "node:child_process";
@@ -40,6 +40,9 @@ function nodeSources(dir) {
   }
   return out;
 }
+
+const eslint = path.join(root, "node_modules/.bin", isWindows ? "eslint.CMD" : "eslint");
+run("eslint", eslint, [".", "--max-warnings", "0"]);
 
 const tsc = path.join(root, "apps/web/node_modules/.bin", isWindows ? "tsc.CMD" : "tsc");
 run("web: tsc -b", tsc, ["-b", "--pretty", "false"], path.join(root, "apps/web"));
