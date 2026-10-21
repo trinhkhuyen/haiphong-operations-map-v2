@@ -6,9 +6,9 @@ Tài liệu cho phiên làm việc tiếp theo. Đọc cùng `CLAUDE.md` (quy ư
 
 Gửi cho Claude:
 
-> Đọc `CLAUDE.md` và `docs/REFACTOR-HANDOFF.md`, rồi lập kế hoạch và làm Giai đoạn 5 (tách store thành slice).
+> Đọc `CLAUDE.md` và `docs/REFACTOR-HANDOFF.md`, rồi lập kế hoạch và làm Giai đoạn 7 (tách các panel).
 
-Trước mỗi giai đoạn: `pnpm check && pnpm test && pnpm test:e2e` phải đạt (mốc xanh hiện tại: web 47, protocol 8, backend 14, agent 19 unit test; e2e 8/8).
+Trước mỗi giai đoạn: `pnpm check && pnpm test && pnpm test:e2e` phải đạt (mốc xanh hiện tại: web 48, protocol 8, backend 14, agent 19 unit test; e2e 8/8).
 
 ## Nguyên tắc đã thống nhất (người dùng đã duyệt)
 
@@ -27,7 +27,8 @@ Trước mỗi giai đoạn: `pnpm check && pnpm test && pnpm test:e2e` phải �
 | 2 | `71dcfa8` | Backend tách `config/http/router/auth/app`, `services/{realtime,releases}`, `routes/{auth,users,agent-api,agents,telemetry,hnth}`. Bỏ 6 route chết; production bắt buộc `JWT_SECRET`/`HNTH_AGENT_TOKEN`; CORS trả đúng origin cho mọi route |
 | 3 | `65d8866` | Agent: `agent.mjs` → `src/index.mjs` (entry) + `config`, `identity`, `backend-client`, `probes/{ping,snmp,scan}`, `telemetry`, `monitor`, `commands`, `updater`, `util`. 19 unit test ở `services/hnth-agent/test/`. Thay đổi có chủ ý duy nhất: `pingHost` chỉ gọi `ping.exe` với literal IP; chuỗi khác (kể cả tên máy, trước đây ping được qua `test-point`) bị coi là mất gói → `offline`. Điểm cấu hình qua backend vốn đã là `inet` nên không ảnh hưởng. Đã kiểm chứng exe đóng gói thật (đăng ký, ping, test-point, cập nhật từ xa 0.2.4→0.2.5) với backend tạm |
 
-| 4 | `refactor(web): API/realtime` | Web: `core/api/` (`API_BASE` duy nhất, `hnthFetch`, client `hnthApi`/`agentsApi`), `core/realtime/` (một SSE + một vòng poll `monitor-state` cho cả trang, `useHnthLiveStore` cho backend/agent/cờ giám sát, `subscribeMonitorBatches`), `core/events.ts` (event bus có kiểu, giữ tên event cũ). Bỏ event `hnth:agent-status`, `hnth:continuous-monitoring`, `hnth:monitor-batch` và các hằng `*_EVENT`. 8 unit test mới. Thay đổi có chủ ý: (1) status bar dùng chung snapshot nên làm mới mỗi 2–5 s thay vì 10 s, và số request `monitor-state` giảm từ 3 nguồn còn 1; (2) `auth.ts`, `HnthStatusMetrics`, `UserAdminPanel`, `AgentsPanel` nay cũng dùng `API_BASE` (trước đây bỏ qua `VITE_HNTH_RELAY_URL`, riêng `AgentsPanel` bỏ qua cả `VITE_HNTH_BACKEND_URL`) — chỉ khác khi đặt biến này khác rỗng |
+| 4 | `8656c94` | Web: `core/api/` (`API_BASE` duy nhất, `hnthFetch`, client `hnthApi`/`agentsApi`), `core/realtime/` (một SSE + một vòng poll `monitor-state` cho cả trang, `useHnthLiveStore` cho backend/agent/cờ giám sát, `subscribeMonitorBatches`), `core/events.ts` (event bus có kiểu, giữ tên event cũ). Bỏ event `hnth:agent-status`, `hnth:continuous-monitoring`, `hnth:monitor-batch` và các hằng `*_EVENT`. 8 unit test mới. Thay đổi có chủ ý: (1) status bar dùng chung snapshot nên làm mới mỗi 2–5 s thay vì 10 s, và số request `monitor-state` giảm từ 3 nguồn còn 1; (2) `auth.ts`, `HnthStatusMetrics`, `UserAdminPanel`, `AgentsPanel` nay cũng dùng `API_BASE` (trước đây bỏ qua `VITE_HNTH_RELAY_URL`, riêng `AgentsPanel` bỏ qua cả `VITE_HNTH_BACKEND_URL`) — chỉ khác khi đặt biến này khác rỗng |
+| 5 | `refactor(web): store slices` | `core/store.ts` chỉ ráp slice + persist; slice trong `core/store/`: `ui`, `layers`, `map`, `administrative`, `drawing`, `annotations` (kèm thao tác Đối tượng đã lưu), `hnth`; `persist.ts` giữ nguyên key, version 4, `migrate`, `partialize` (21 trường), `merge`. Thuộc tính được chép nguyên văn theo tên khóa bằng script. Test mới: không slice nào trùng khóa, đủ 113 trường. Không đổi hành vi |
 
 ### Cách kiểm chứng exe Agent (dùng lại khi đổi agent)
 - Build ra scratchpad bằng bản sao `electron-builder.yml` chỉ đổi `directories.output` và nguồn `config.json` (dùng config giả, tránh nhúng token thật): `electron-builder --win portable --config <copy> -c.extraMetadata.version=<x>`.
@@ -35,10 +36,6 @@ Trước mỗi giai đoạn: `pnpm check && pnpm test && pnpm test:e2e` phải �
 - Dọn: chỉ dừng tiến trình có `ExecutablePath` trong thư mục thử cùng cây con của chúng — **người dùng chạy Agent thật cùng tên `Agent HNTH`**.
 
 ## Còn lại
-
-### GĐ5 — Tách store thành slice (`core/store.ts`, 604 dòng, 113 trường)
-- Slice: `map`, `layers`, `administrative`, `drawing`, `annotations`, `hnth`, `ui`.
-- **Giữ nguyên** key localStorage `haiphong-map-display-preferences`, version 4 và 21 trường persist — `store.test.ts` khóa điều này. Đổi hình dạng thì tăng version + migrate, test với snapshot localStorage thật.
 
 ### GĐ7 — Tách các panel
 - `HnthPanel.tsx` (1.094 dòng): `HnthAgentSelector`, `HnthPointConfigForm`, `HnthPointList`, `useHnthMonitoring`, `hnth-import-export` (đã có test CSV).

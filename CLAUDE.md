@@ -72,7 +72,7 @@ docker compose --env-file .env.source -f docker-compose.source.yml up -d --build
 
 **Dữ liệu realtime HNTH** đi qua `core/realtime/`: `hnth-realtime.ts` giữ **một** EventSource `/api/hnth/stream` và **một** vòng poll `/api/hnth/monitor-state` cho cả trang (chu kỳ = ngắn nhất mà subscriber yêu cầu; `subscribeHnthSnapshots`, `subscribeHnthStream`, `subscribeMonitorBatches`, `refreshHnthSnapshot`). Trạng thái backend, agent đang chọn và cờ giám sát nằm ở `useHnthLiveStore` (không persist), được ghi **trước** khi gọi listener. Cần phản ứng đồng bộ (vd reset log trước batch đầu của phiên mới) thì dùng `useHnthLiveStore.subscribe`, không dùng effect theo render. Không còn event `hnth:agent-status`, `hnth:continuous-monitoring`, `hnth:monitor-batch`.
 
-**State**: `core/store.ts` (Zustand + `persist` vào localStorage). Thêm field bền vững → kiểm tra `partialize`/migrate để không làm hỏng state người dùng đã lưu.
+**State**: `core/store.ts` (Zustand + `persist` vào localStorage) ráp các slice trong `core/store/` (`ui`, `layers`, `map`, `administrative`, `drawing`, `annotations`, `hnth`). Thêm trường vào slice phù hợp; action được đọc/ghi trường slice khác qua `set`/`get`. Thêm field bền vững → sửa `core/store/persist.ts` (`partialize`/`merge`/migrate) để không làm hỏng state người dùng đã lưu.
 
 **Gọi API từ web**: dùng client trong `core/api/clients.ts` (`hnthApi`, `agentsApi`), hoặc `hnthFetch(apiUrl(path))` (`core/api/http.ts`, `core/api/base.ts`) — tự gắn Bearer, `no-store`, tự refresh khi 401. `API_BASE` là nơi duy nhất đọc `VITE_HNTH_BACKEND_URL`/`VITE_HNTH_RELAY_URL`; rỗng = same-origin `/api` (bắt buộc cho điện thoại trong LAN; đừng hardcode `localhost`). Riêng `core/auth.ts` gọi `fetch` thẳng (login/refresh không được tự refresh).
 
