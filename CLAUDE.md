@@ -23,6 +23,8 @@ Agent (Windows tray, Electron)  --HTTPS outbound, Bearer token-->  hnth-backend 
 
 README.md mô tả `packages/contracts`, `services/api`, `infra` — **không tồn tại**, đó là kế hoạch cũ. Tin code, không tin README.
 
+Đang refactor module hóa theo giai đoạn: tiến độ, việc còn lại và quyết định chờ duyệt ở `docs/REFACTOR-HANDOFF.md`.
+
 ## Lệnh (đã kiểm chứng trên Windows, pnpm 11, Node 25)
 
 ```bash
