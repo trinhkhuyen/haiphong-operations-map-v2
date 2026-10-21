@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import * as XLSX from "xlsx";
-import { hnthFetch } from "../../core/hnth-api";
+import { API_BASE } from "../../core/api/base";
+import { hnthFetch } from "../../core/api/http";
 type Role = "admin" | "operator" | "viewer";
 type User = { id:string; username:string; displayName:string; role:Role; isActive:boolean; department?:string; phone?:string; menuPermissions?:string[] };
 type UserForm = { username:string; displayName:string; password:string; role:Role; department:string; phone:string; menuPermissions:string[] };
 const menus = [{id:"layers",label:"Lớp dữ liệu"},{id:"zones",label:"Khoanh vùng"},{id:"saved",label:"Đối tượng đã lưu"},{id:"routing",label:"Định tuyến"},{id:"conference",label:"HNTH"},{id:"agents",label:"Agents"}];
-const base=((import.meta.env.VITE_HNTH_BACKEND_URL as string|undefined)||"").replace(/\/$/,"");
+const base=API_BASE;
 const emptyForm=():UserForm=>({username:"",displayName:"",password:"",role:"viewer",department:"",phone:"",menuPermissions:menus.map(x=>x.id)});
 const norm=(v:unknown)=>String(v??"").trim().toLocaleLowerCase("vi").normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/đ/g,"d").replace(/\s+/g," ");
 const col=(row:Record<string,unknown>, names:string[])=>String(Object.entries(row).find(([k])=>names.includes(norm(k)))?.[1]??"").trim();

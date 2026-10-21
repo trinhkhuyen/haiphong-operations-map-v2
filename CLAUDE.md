@@ -68,11 +68,13 @@ docker compose --env-file .env.source -f docker-compose.source.yml up -d --build
 - Frontend (`HnthConnectionStatus` = `ConnectionStatus`): `unknown | unconnected | connected | lost`, nhãn trong `HNTH_STATUS_LABELS`. Ánh xạ duy nhất ở `toConnectionStatus(agentStatus, hasIp)` trong `hnth-protocol`: không có IP → `unknown`; `online` → `unconnected` ("Chờ kết nối"); `offline` → `lost`. `connected` chỉ đặt thủ công.
 - IP rỗng luôn là `unknown`, kể cả khi payload nói khác (backend ép ở `/api/telemetry/ping-results`).
 
-**Giao tiếp giữa module frontend bằng `window` CustomEvent**, không qua store: `hnth:layer-ready`, `hnth:agent-status`, `hnth:auth-expired`, `hnth:open-login`, `hnth:focus`, `hnth:test-point`, `hnth:monitor-batch`, `hnth:continuous-monitoring`, `hnth:open-point-log`, cùng các hằng `*_EVENT` trong `features/map/map-events.ts`. Grep tên event trước khi đổi.
+**Lệnh giữa module frontend** (điều khiển bản đồ, mở popup/đăng nhập) đi qua `core/events.ts`: `emitAppEvent(name, detail)` / `onAppEvent(name, handler)` (trả hàm hủy), kiểu detail khai báo trong `AppEventMap`. Bên dưới vẫn là `window` CustomEvent với tên cũ (`hnth:*`, `map:*`). Thêm lệnh mới = thêm vào `AppEventMap`, không `window.dispatchEvent` tay.
+
+**Dữ liệu realtime HNTH** đi qua `core/realtime/`: `hnth-realtime.ts` giữ **một** EventSource `/api/hnth/stream` và **một** vòng poll `/api/hnth/monitor-state` cho cả trang (chu kỳ = ngắn nhất mà subscriber yêu cầu; `subscribeHnthSnapshots`, `subscribeHnthStream`, `subscribeMonitorBatches`, `refreshHnthSnapshot`). Trạng thái backend, agent đang chọn và cờ giám sát nằm ở `useHnthLiveStore` (không persist), được ghi **trước** khi gọi listener. Cần phản ứng đồng bộ (vd reset log trước batch đầu của phiên mới) thì dùng `useHnthLiveStore.subscribe`, không dùng effect theo render. Không còn event `hnth:agent-status`, `hnth:continuous-monitoring`, `hnth:monitor-batch`.
 
 **State**: `core/store.ts` (Zustand + `persist` vào localStorage). Thêm field bền vững → kiểm tra `partialize`/migrate để không làm hỏng state người dùng đã lưu.
 
-**Gọi API từ web**: dùng `hnthFetch` (`core/hnth-api.ts`) — tự gắn Bearer, `no-store`, tự refresh khi 401. Base URL rỗng = same-origin `/api` (bắt buộc cho điện thoại trong LAN; đừng hardcode `localhost`).
+**Gọi API từ web**: dùng client trong `core/api/clients.ts` (`hnthApi`, `agentsApi`), hoặc `hnthFetch(apiUrl(path))` (`core/api/http.ts`, `core/api/base.ts`) — tự gắn Bearer, `no-store`, tự refresh khi 401. `API_BASE` là nơi duy nhất đọc `VITE_HNTH_BACKEND_URL`/`VITE_HNTH_RELAY_URL`; rỗng = same-origin `/api` (bắt buộc cho điện thoại trong LAN; đừng hardcode `localhost`). Riêng `core/auth.ts` gọi `fetch` thẳng (login/refresh không được tự refresh).
 
 **Backend**:
 - Thêm route: `router.add(method, "/api/x/:id", handler, { public })` trong `routes/<nhóm>.mjs`. Mặc định route **cần đăng nhập** (app.mjs xác thực JWT trước, gán `user`); `public: true` chỉ cho live-view của Guest và API của Agent (tự kiểm tra token agent bằng `auth.agentAuthorizedForId`). Đường dẫn không khớp: chưa đăng nhập → 401, đã đăng nhập → 404.

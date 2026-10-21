@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { Activity, Check, KeyRound, Network, Pencil, RadioTower, RefreshCw, Settings2, Wifi, WifiOff, X } from "lucide-react";
 import { compareVersions, EXE_VERSION_SCAN_BYTES, readExeVersion as readExeVersionBytes } from "@haiphong-ops/hnth-protocol";
-import { hnthFetch } from "../../core/hnth-api";
+import { agentsApi } from "../../core/api/clients";
+import { emitAppEvent } from "../../core/events";
 
 type SnmpTarget = { targetId?: string; host?: string; port?: number; community?: string; version?: string; oids?: string[] };
 type Agent = {
@@ -46,7 +47,7 @@ export function AgentsPanel() {
     const timeout = window.setTimeout(() => controller.abort(), 8000);
     setLoading(true); setError(""); setRequiresLogin(false);
     try {
-      const response = await hnthFetch("/api/agents", { signal: controller.signal });
+      const response = await agentsApi.list({ signal: controller.signal });
       if (response.status === 401 || response.status === 403) { setRequiresLogin(true); setError("Cần đăng nhập bằng tài khoản Operator hoặc Admin để quản lý Agent."); return; }
       if (!response.ok) { const payload = await response.json().catch(() => ({})) as { error?: string }; throw new Error(payload.error || `Backend trả về HTTP ${response.status}`); }
       const payload = await response.json() as unknown;
@@ -80,9 +81,7 @@ export function AgentsPanel() {
     if (!editing || !tokenDraft.trim()) { setTokenMessage("Hãy tạo hoặc nhập token trước khi đổi."); return; }
     setTokenBusy(true); setTokenMessage("");
     try {
-      const response = await hnthFetch(`/api/agents/${encodeURIComponent(editing.agentId)}/token`, {
-        method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ token: tokenDraft.trim() }),
-      });
+      const response = await agentsApi.setToken(editing.agentId, tokenDraft.trim());
       const payload = await response.json().catch(() => ({})) as { error?: string };
       if (response.status === 401 || response.status === 403) { setRequiresLogin(true); throw new Error("Phiên đăng nhập không có quyền đổi token Agent."); }
       if (!response.ok) throw new Error(payload.error || `Không gửi được token mới (HTTP ${response.status})`);
@@ -108,13 +107,12 @@ export function AgentsPanel() {
     if (!editing || !releaseFile || !releaseVersion) { setReleaseMessage("Chọn file Agent .exe hợp lệ trước khi cập nhật."); return; }
     setReleaseBusy(true); setReleaseMessage("");
     try {
-      const query = `?version=${encodeURIComponent(releaseVersion)}&fileName=${encodeURIComponent(releaseFile.name)}`;
-      const upload = await hnthFetch(`/api/agent-releases${query}`, { method: "POST", headers: { "content-type": "application/octet-stream" }, body: releaseFile });
+      const upload = await agentsApi.uploadRelease(releaseFile, { version: releaseVersion, fileName: releaseFile.name });
       const uploaded = await upload.json().catch(() => ({})) as { version?: string; sha256?: string; error?: string };
       if (!upload.ok || !uploaded.sha256) throw new Error(uploaded.error || `Không tải được bản cập nhật (HTTP ${upload.status})`);
       // Backend tự điền đường dẫn tải và SHA-256 từ bản release vừa lưu; Agent ghép
       // đường dẫn đó với backendUrl của chính nó nên không phụ thuộc địa chỉ trình duyệt.
-      const command = await hnthFetch(`/api/agents/${encodeURIComponent(editing.agentId)}/commands`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ type: "agent-update", version: uploaded.version || releaseVersion }) });
+      const command = await agentsApi.sendCommand(editing.agentId, { type: "agent-update", version: uploaded.version || releaseVersion });
       const payload = await command.json().catch(() => ({})) as { error?: string };
       if (!command.ok) throw new Error(payload.error || `Không gửi được lệnh cập nhật (HTTP ${command.status})`);
       setReleaseMessage(`Đã gửi bản ${uploaded.version || releaseVersion} cho Agent. Agent sẽ tự thoát, cập nhật và khởi động lại; phiên bản mới hiện ở đây sau khoảng 1 phút.`);
@@ -133,10 +131,7 @@ export function AgentsPanel() {
     } catch (parseError) { setError(parseError instanceof Error ? parseError.message : "Cấu hình SNMP không hợp lệ."); setAdvanced(true); return; }
     setError("");
     try {
-      const response = await hnthFetch(`/api/agents/${encodeURIComponent(editing.agentId)}`, {
-        method: "PATCH", headers: { "content-type": "application/json" },
-        body: JSON.stringify({ name, heartbeatSeconds, monitorConfig: { scanConcurrency, scanDelayMs, scanScheduleSeconds, probeCount, probeIntervalMs, snmpTargets } }),
-      });
+      const response = await agentsApi.update(editing.agentId, { name, heartbeatSeconds, monitorConfig: { scanConcurrency, scanDelayMs, scanScheduleSeconds, probeCount, probeIntervalMs, snmpTargets } });
       if (response.status === 401 || response.status === 403) { setRequiresLogin(true); setError("Phiên đăng nhập không có quyền cập nhật Agent."); return; }
       if (!response.ok) { const payload = await response.json().catch(() => ({})) as { error?: string }; throw new Error(payload.error || `Không lưu được Agent (HTTP ${response.status})`); }
       setEditing(null); await load();
@@ -148,7 +143,7 @@ export function AgentsPanel() {
     <p className="panel-help">Quản lý các Agent đang kết nối từ những mạng LAN khác nhau. Tên Agent sẽ xuất hiện khi chọn nguồn Scan trong menu HNTH.</p>
     <div className="agent-list" aria-busy={loading}>
       {loading && <div className="hnth-loading"><RadioTower size={20}/><span>Đang tải danh sách Agent...</span></div>}
-      {error && !editing && <div className="agent-error"><span>{error}</span><div className="agent-error-actions"><button className="secondary-button" onClick={() => void load()}>Thử lại</button>{requiresLogin && <button className="primary-button" onClick={() => window.dispatchEvent(new Event("hnth:open-login"))}>Đăng nhập</button>}</div></div>}
+      {error && !editing && <div className="agent-error"><span>{error}</span><div className="agent-error-actions"><button className="secondary-button" onClick={() => void load()}>Thử lại</button>{requiresLogin && <button className="primary-button" onClick={() => emitAppEvent("hnth:open-login")}>Đăng nhập</button>}</div></div>}
       {!loading && !error && agents.length === 0 && <div className="hnth-loading"><RadioTower size={20}/><span>Chưa có Agent đăng ký</span></div>}
       {agents.map((agent) => <article className="agent-card" key={agent.agentId}>
         <div className="agent-status">{agent.status === "online" ? <Wifi size={17}/> : <WifiOff size={17}/>}</div>

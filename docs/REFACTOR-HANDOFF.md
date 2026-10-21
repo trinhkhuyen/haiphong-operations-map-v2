@@ -6,9 +6,9 @@ Tài liệu cho phiên làm việc tiếp theo. Đọc cùng `CLAUDE.md` (quy ư
 
 Gửi cho Claude:
 
-> Đọc `CLAUDE.md` và `docs/REFACTOR-HANDOFF.md`, rồi lập kế hoạch và làm Giai đoạn 4 (tầng API và realtime của web).
+> Đọc `CLAUDE.md` và `docs/REFACTOR-HANDOFF.md`, rồi lập kế hoạch và làm Giai đoạn 5 (tách store thành slice).
 
-Trước mỗi giai đoạn: `pnpm check && pnpm test && pnpm test:e2e` phải đạt (mốc xanh hiện tại: web 39, protocol 8, backend 14, agent 19 unit test; e2e 8/8).
+Trước mỗi giai đoạn: `pnpm check && pnpm test && pnpm test:e2e` phải đạt (mốc xanh hiện tại: web 47, protocol 8, backend 14, agent 19 unit test; e2e 8/8).
 
 ## Nguyên tắc đã thống nhất (người dùng đã duyệt)
 
@@ -25,7 +25,9 @@ Trước mỗi giai đoạn: `pnpm check && pnpm test && pnpm test:e2e` phải �
 | 0 | `2b21e2e` | Lưới an toàn: vitest cho web (hàm thuần, store + hình dạng persist, CSV, version exe); `scripts/e2e/` chạy backend + agent thật trên schema Postgres riêng |
 | 1 | `0e7bc94` | `packages/hnth-protocol` (ESM + `.d.ts`): `toConnectionStatus`, `classifyProbeResult`, `OPERATOR_COMMAND_TYPES`, `readExeVersion`, `compareVersions`. Web, backend, agent đều import; exe Agent kèm package qua `extraResources` |
 | 2 | `71dcfa8` | Backend tách `config/http/router/auth/app`, `services/{realtime,releases}`, `routes/{auth,users,agent-api,agents,telemetry,hnth}`. Bỏ 6 route chết; production bắt buộc `JWT_SECRET`/`HNTH_AGENT_TOKEN`; CORS trả đúng origin cho mọi route |
-| 3 | `refactor(agent)` | Agent: `agent.mjs` → `src/index.mjs` (entry) + `config`, `identity`, `backend-client`, `probes/{ping,snmp,scan}`, `telemetry`, `monitor`, `commands`, `updater`, `util`. 19 unit test ở `services/hnth-agent/test/`. Thay đổi có chủ ý duy nhất: `pingHost` chỉ gọi `ping.exe` với literal IP; chuỗi khác (kể cả tên máy, trước đây ping được qua `test-point`) bị coi là mất gói → `offline`. Điểm cấu hình qua backend vốn đã là `inet` nên không ảnh hưởng. Đã kiểm chứng exe đóng gói thật (đăng ký, ping, test-point, cập nhật từ xa 0.2.4→0.2.5) với backend tạm |
+| 3 | `65d8866` | Agent: `agent.mjs` → `src/index.mjs` (entry) + `config`, `identity`, `backend-client`, `probes/{ping,snmp,scan}`, `telemetry`, `monitor`, `commands`, `updater`, `util`. 19 unit test ở `services/hnth-agent/test/`. Thay đổi có chủ ý duy nhất: `pingHost` chỉ gọi `ping.exe` với literal IP; chuỗi khác (kể cả tên máy, trước đây ping được qua `test-point`) bị coi là mất gói → `offline`. Điểm cấu hình qua backend vốn đã là `inet` nên không ảnh hưởng. Đã kiểm chứng exe đóng gói thật (đăng ký, ping, test-point, cập nhật từ xa 0.2.4→0.2.5) với backend tạm |
+
+| 4 | `refactor(web): API/realtime` | Web: `core/api/` (`API_BASE` duy nhất, `hnthFetch`, client `hnthApi`/`agentsApi`), `core/realtime/` (một SSE + một vòng poll `monitor-state` cho cả trang, `useHnthLiveStore` cho backend/agent/cờ giám sát, `subscribeMonitorBatches`), `core/events.ts` (event bus có kiểu, giữ tên event cũ). Bỏ event `hnth:agent-status`, `hnth:continuous-monitoring`, `hnth:monitor-batch` và các hằng `*_EVENT`. 8 unit test mới. Thay đổi có chủ ý: (1) status bar dùng chung snapshot nên làm mới mỗi 2–5 s thay vì 10 s, và số request `monitor-state` giảm từ 3 nguồn còn 1; (2) `auth.ts`, `HnthStatusMetrics`, `UserAdminPanel`, `AgentsPanel` nay cũng dùng `API_BASE` (trước đây bỏ qua `VITE_HNTH_RELAY_URL`, riêng `AgentsPanel` bỏ qua cả `VITE_HNTH_BACKEND_URL`) — chỉ khác khi đặt biến này khác rỗng |
 
 ### Cách kiểm chứng exe Agent (dùng lại khi đổi agent)
 - Build ra scratchpad bằng bản sao `electron-builder.yml` chỉ đổi `directories.output` và nguồn `config.json` (dùng config giả, tránh nhúng token thật): `electron-builder --win portable --config <copy> -c.extraMetadata.version=<x>`.
@@ -33,11 +35,6 @@ Trước mỗi giai đoạn: `pnpm check && pnpm test && pnpm test:e2e` phải �
 - Dọn: chỉ dừng tiến trình có `ExecutablePath` trong thư mục thử cùng cây con của chúng — **người dùng chạy Agent thật cùng tên `Agent HNTH`**.
 
 ## Còn lại
-
-### GĐ4 — Web: tầng API và realtime
-- `core/api/`: một base URL dùng chung (hiện tính lặp 8 chỗ từ `VITE_HNTH_BACKEND_URL`/`VITE_HNTH_RELAY_URL`), client có kiểu (`hnthApi`, `agentsApi`, `authApi`); bỏ 7 chỗ `fetch` thô.
-- Một service realtime duy nhất (SSE + polling dự phòng) ghi snapshot vào store; hiện `HnthPanel` giữ SSE, `App.tsx` và `HnthStatusMetrics` tự poll riêng.
-- `core/events.ts`: event bus có kiểu cho lệnh điều khiển bản đồ; event chỉ để chia sẻ dữ liệu (`hnth:agent-status`, `hnth:continuous-monitoring`, `hnth:monitor-batch`) chuyển sang store.
 
 ### GĐ5 — Tách store thành slice (`core/store.ts`, 604 dòng, 113 trường)
 - Slice: `map`, `layers`, `administrative`, `drawing`, `annotations`, `hnth`, `ui`.

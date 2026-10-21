@@ -12,7 +12,9 @@ import type { AdministrativeUnit, BaseMapMode, DrawFeatureInfo, OperationalLayer
 import { unitsToFeatureCollection } from "../administrative/data-provider";
 import { HNTH_LAYER_ID, HNTH_STATUS_LABELS, normalizeHnthStatus, type HnthConnectionStatus, type HnthStatusStyles } from "../layers/hnth-data-provider";
 import { HnthDisconnectConfirmButton } from "../conference/HnthDisconnectConfirmButton";
-import { FIT_HAIPHONG_OVERVIEW_EVENT, MAP_ADMINISTRATIVE_PULSE_EVENT, MAP_CAPTURE_BACKGROUND_EVENT, MAP_CONTEXT_INFO_EVENT, MAP_PRESENTATION_GEOMETRY_EVENT } from "./map-events";
+import type { FixedMapInfo } from "./map-events";
+import { emitAppEvent, onAppEvent } from "../../core/events";
+import { useHnthLiveStore } from "../../core/realtime/hnth-live-store";
 
 // Tạo style theo đúng chế độ nền đã lưu ngay từ frame đầu tiên. Nếu luôn khởi
 // tạo OSM rồi mới đổi sang vệ tinh sau sự kiện `load`, MapLibre sẽ lộ một mảng
@@ -210,10 +212,6 @@ interface DrawEditMarkerHandle {
   marker: maplibregl.Marker;
   kind: "edge-label" | "move-handle" | "radius-handle";
 }
-
-type FixedMapInfo =
-  | { kind: "administrative"; unitId: number; includeConnectionPoint: boolean }
-  | { kind: "hnth"; pointId: string; administrativeId?: number; pulseBoundary?: boolean };
 
 // Terra Draw can emit a transient deselect while custom MapLibre markers edit
 // geometry. Track the edited feature outside the marker DOM so a marker redraw
@@ -420,14 +418,11 @@ export function MapCanvas() {
   }, [stopInspectedBoundaryPulse]);
 
   useEffect(() => {
-    const pulseAdministrativeBoundary = (event: Event) => {
-      const detail = (event as CustomEvent<{ administrativeId?: number; administrativeIds?: number[]; cycles?: number; boundaryWidthMultiplier?: number; durationMs?: number; animate?: boolean }>).detail;
+    return onAppEvent("map:administrative-pulse", (detail) => {
       const ids = detail?.administrativeIds?.length ? detail.administrativeIds : detail?.administrativeId === undefined ? [] : [detail.administrativeId];
       if (!ids.length) return;
       pulseInspectedBoundary(ids, detail.cycles ?? 3, detail.boundaryWidthMultiplier ?? 1, detail.durationMs, detail.animate ?? true);
-    };
-    window.addEventListener(MAP_ADMINISTRATIVE_PULSE_EVENT, pulseAdministrativeBoundary);
-    return () => window.removeEventListener(MAP_ADMINISTRATIVE_PULSE_EVENT, pulseAdministrativeBoundary);
+    });
   }, [pulseInspectedBoundary]);
 
   const clearMapInspection = useCallback(() => {
@@ -528,20 +523,11 @@ export function MapCanvas() {
       fitHaiphongOverview(map, useAppStore.getState().administrativeUnits, HOME_CITY_TRANSITION_DURATION_MS);
     };
 
-    window.addEventListener(FIT_HAIPHONG_OVERVIEW_EVENT, fitCityOverview);
-    return () => window.removeEventListener(FIT_HAIPHONG_OVERVIEW_EVENT, fitCityOverview);
+    return onAppEvent("map:fit-haiphong-overview", fitCityOverview);
   }, []);
 
   useEffect(() => {
-    const focusHnthPoint = (event: Event) => {
-      const detail = (event as CustomEvent<{
-        coordinates?: [number, number];
-        preserveZoom?: boolean;
-        zoomFraction?: number;
-        targetZoom?: number;
-        administrativeId?: number;
-        boundaryWidthMultiplier?: number;
-      }>).detail;
+    return onAppEvent("hnth:focus", (detail) => {
       const coordinates = detail?.coordinates;
       if (!coordinates || !mapRef.current) return;
       if (detail.administrativeId !== undefined) {
@@ -563,14 +549,11 @@ export function MapCanvas() {
         ...(detail.preserveZoom ? {} : { zoom: targetZoom }),
         duration: 700,
       });
-    };
-    window.addEventListener("hnth:focus", focusHnthPoint);
-    return () => window.removeEventListener("hnth:focus", focusHnthPoint);
+    });
   }, [stopInspectedBoundaryPulse]);
 
   useEffect(() => {
-    const showContextInfo = (event: Event) => {
-      const detail = (event as CustomEvent<FixedMapInfo>).detail;
+    return onAppEvent("map:context-info", (detail) => {
       if (detail?.kind === "hnth" && detail.pointId) {
         setFixedMapInfo(detail);
         setInspectedAdministrativeId(detail.administrativeId ?? null);
@@ -579,9 +562,7 @@ export function MapCanvas() {
           pulseInspectedBoundary(detail.administrativeId);
         }
       }
-    };
-    window.addEventListener(MAP_CONTEXT_INFO_EVENT, showContextInfo);
-    return () => window.removeEventListener(MAP_CONTEXT_INFO_EVENT, showContextInfo);
+    });
   }, [pulseInspectedBoundary]);
 
   useEffect(() => {
@@ -1587,29 +1568,26 @@ export function MapCanvas() {
       }
     };
 
-    const onMonitoring = (event: Event) => {
-      hnthContinuousMonitoringRef.current = Boolean((event as CustomEvent<{ enabled?: boolean }>).detail?.enabled);
-      syncHubPulse();
+    // Cờ giám sát và trạng thái agent đang chọn cho HNTH đến từ core/realtime.
+    const readLiveState = (live: ReturnType<typeof useHnthLiveStore.getState>) => {
+      hnthContinuousMonitoringRef.current = live.monitoring.enabled;
+      hnthAgentOnlineRef.current = live.agent.state === "online";
     };
-    const onAgentStatus = (event: Event) => {
-      // Sự kiện này luôn mô tả agent đang được chọn cho HNTH (HnthPanel/App lọc sẵn).
-      const detail = (event as CustomEvent<{ agentId?: string; online?: boolean }>).detail;
-      hnthAgentOnlineRef.current = Boolean(detail.online);
+    readLiveState(useHnthLiveStore.getState());
+    const stopLive = useHnthLiveStore.subscribe((live, previous) => {
+      if (live.monitoring === previous.monitoring && live.agent === previous.agent) return;
+      readLiveState(live);
       syncHubPulse();
-    };
-    window.addEventListener("hnth:continuous-monitoring", onMonitoring);
-    window.addEventListener("hnth:agent-status", onAgentStatus);
+    });
     syncHubPulse();
     return () => {
-      window.removeEventListener("hnth:continuous-monitoring", onMonitoring);
-      window.removeEventListener("hnth:agent-status", onAgentStatus);
+      stopLive();
       removeHubPulse();
     };
   }, [activePanel, isMapReady, layers]);
 
   useEffect(() => {
-    const captureBackground = (event: Event) => {
-      const detail = (event as CustomEvent<{ resolve?: (dataUrl: string | null) => void; staticOnly?: boolean }>).detail;
+    return onAppEvent("map:capture-background", (detail) => {
       const resolve = detail?.resolve;
       const map = mapRef.current;
       if (!resolve || !map || !isMapReady) { resolve?.(null); return; }
@@ -1635,14 +1613,12 @@ export function MapCanvas() {
       };
       map.once("render", handleRender);
       map.triggerRepaint();
-    };
-    window.addEventListener(MAP_CAPTURE_BACKGROUND_EVENT, captureBackground);
-    return () => window.removeEventListener(MAP_CAPTURE_BACKGROUND_EVENT, captureBackground);
+    });
   }, [isMapReady]);
 
   useEffect(() => {
-    const providePresentationGeometry = (event: Event) => {
-      const resolve = (event as CustomEvent<{ resolve?: (value: unknown) => void }>).detail?.resolve;
+    return onAppEvent("map:presentation-geometry", (detail) => {
+      const resolve = detail?.resolve;
       const map = mapRef.current;
       if (!resolve || !map || !isMapReady) { resolve?.(null); return; }
       const projectCoordinate = (coordinates: [number, number]) => {
@@ -1691,9 +1667,7 @@ export function MapCanvas() {
         lineStyles: state.hnthLineStyles,
         areaStyles: state.hnthAreaStyles,
       });
-    };
-    window.addEventListener(MAP_PRESENTATION_GEOMETRY_EVENT, providePresentationGeometry);
-    return () => window.removeEventListener(MAP_PRESENTATION_GEOMETRY_EVENT, providePresentationGeometry);
+    });
   }, [isMapReady]);
 
   useEffect(() => {
@@ -1962,7 +1936,7 @@ function HnthFixedInfoCard({ properties, onClose }: { properties: Record<string,
           type="button"
           onClick={() => {
             if (!pointId) return;
-            window.dispatchEvent(new CustomEvent("hnth:test-point", { detail: { pointId, ipAddress: String(properties.ipAddress ?? ""), runId: Date.now() } }));
+            emitAppEvent("hnth:test-point", { pointId, ipAddress: String(properties.ipAddress ?? ""), runId: Date.now() });
           }}
         ><Zap size={13}/> Test</button>
         <button
@@ -1970,7 +1944,7 @@ function HnthFixedInfoCard({ properties, onClose }: { properties: Record<string,
           type="button"
           onClick={() => {
             if (!pointId) return;
-            window.dispatchEvent(new CustomEvent("hnth:open-point-log", { detail: { pointId } }));
+            emitAppEvent("hnth:open-point-log", { pointId });
           }}
         ><FileText size={13}/> Log</button>
         {status === "connected"
@@ -2877,9 +2851,7 @@ function showHnthPointPopup(
   if (window.matchMedia("(max-width: 760px)").matches) return;
   const wardCode = String(properties?.wardCode ?? "");
   const administrativeId = state.administrativeUnits.find((unit) => String(unit.wardCode ?? "") === wardCode)?.id;
-  window.dispatchEvent(new CustomEvent<FixedMapInfo>(MAP_CONTEXT_INFO_EVENT, {
-    detail: { kind: "hnth", pointId, administrativeId },
-  }));
+  emitAppEvent("map:context-info", { kind: "hnth", pointId, administrativeId });
 }
 
 function canInspectOperationalFeature() {

@@ -3,9 +3,11 @@ import { Cable, ChevronDown, ChevronUp, CircleAlert, CircleHelp, Clock3, FileTex
 import type { Feature, Point } from "geojson";
 import { toConnectionStatus } from "@haiphong-ops/hnth-protocol";
 import { useAppStore } from "../../core/store";
-import { hnthFetch } from "../../core/hnth-api";
+import { hnthApi } from "../../core/api/clients";
+import { emitAppEvent, onAppEvent } from "../../core/events";
+import { subscribeMonitorBatches } from "../../core/realtime/hnth-realtime";
+import { useHnthLiveStore, type MonitoringInfo } from "../../core/realtime/hnth-live-store";
 import { HNTH_LAYER_ID, HNTH_STATUS_LABELS, normalizeHnthStatus, type HnthConnectionStatus } from "../layers/hnth-data-provider";
-import { FIT_HAIPHONG_OVERVIEW_EVENT, MAP_ADMINISTRATIVE_PULSE_EVENT, MAP_CONTEXT_INFO_EVENT } from "../map/map-events";
 import { HnthDisconnectConfirmButton } from "./HnthDisconnectConfirmButton";
 
 type HnthPointFeature = Feature<Point, Record<string, unknown>>;
@@ -20,9 +22,6 @@ const cards: Array<{ status: HnthConnectionStatus; label: string; icon: typeof C
 ];
 
 export function HnthStatusMetrics() {
-  // Use the Vite same-origin /api proxy by default so mobile clients do not
-  // resolve 127.0.0.1 to the phone itself.
-  const apiBase = ((import.meta.env.VITE_HNTH_BACKEND_URL as string | undefined) || "").replace(/\/$/, "");
   const layer = useAppStore((state) => state.layers.find((item) => item.id === HNTH_LAYER_ID));
   const administrativeUnits = useAppStore((state) => state.administrativeUnits);
   const setSelectedHnthPointId = useAppStore((state) => state.setSelectedHnthPointId);
@@ -97,18 +96,17 @@ export function HnthStatusMetrics() {
   }, [grouped.lost.length, points.length]);
 
   useEffect(() => {
-    const openManualTest = (event: Event) => {
-      const detail = (event as CustomEvent<{ pointId?: string; ipAddress?: string; runId?: number }>).detail;
+    return onAppEvent("hnth:test-point", (detail) => {
       const pointId = detail?.pointId;
       if (!pointId) return;
       setAutoPingEnabled(false);
       setTestSequencePosition(null);
       setTestPointId(pointId);
       setTestRunId(detail?.runId ?? Date.now());
-      if (detail?.ipAddress) void hnthFetch(`${apiBase}/api/hnth/test`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ pointId, ipAddress: detail.ipAddress }) });
+      if (detail?.ipAddress) void hnthApi.testPoint({ pointId, ipAddress: detail.ipAddress });
       window.setTimeout(async () => {
         try {
-          const response = await hnthFetch(`${apiBase}/api/hnth/status`);
+          const response = await hnthApi.status();
           if (!response.ok) return;
           const payload = await response.json() as { results?: Array<{ pointId?: string; ipAddress?: string | null; status?: string; latencyMs?: number | null }> };
           const result = payload.results?.find((item) => item.pointId === pointId);
@@ -116,14 +114,11 @@ export function HnthStatusMetrics() {
           if (result?.status) updateHnthPoint(pointId, { status: toConnectionStatus(result.status, hasIp) });
         } catch { /* agent/relay may be offline; popup still shows the local state */ }
       }, 1800);
-    };
-    window.addEventListener("hnth:test-point", openManualTest);
-    return () => window.removeEventListener("hnth:test-point", openManualTest);
+    });
   }, []);
 
   useEffect(() => {
-    const onMonitoring = (event: Event) => {
-      const detail = (event as CustomEvent<{ enabled?: boolean; concurrency?: number }>).detail;
+    const onMonitoring = (detail: MonitoringInfo) => {
       const enabled = Boolean(detail?.enabled);
       setContinuousMonitoring(enabled);
       if (detail?.concurrency) setMonitorConcurrency(detail.concurrency);
@@ -139,8 +134,11 @@ export function HnthStatusMetrics() {
         });
       }
     };
-    window.addEventListener("hnth:continuous-monitoring", onMonitoring);
-    return () => window.removeEventListener("hnth:continuous-monitoring", onMonitoring);
+    // Nghe đồng bộ (không qua render) để reset log của phiên mới chạy trước khi
+    // batch đầu tiên của phiên đó được ghi vào log.
+    return useHnthLiveStore.subscribe((state, previous) => {
+      if (state.monitoring !== previous.monitoring) onMonitoring(state.monitoring);
+    });
   }, [allPoints, updateHnthPoint]);
 
   useEffect(() => {
@@ -160,8 +158,8 @@ export function HnthStatusMetrics() {
         timestamp,
       };
     };
-    const onMonitoringBatch = (event: Event) => {
-      const batch = (event as CustomEvent<{ sentAt?: string; results?: MonitorLogApiEntry[]; allResults?: MonitorLogApiEntry[] }>).detail;
+    return subscribeMonitorBatches((monitorBatch) => {
+      const batch = monitorBatch as { sentAt?: string; results?: MonitorLogApiEntry[]; allResults?: MonitorLogApiEntry[] };
       // allResults là toàn bộ endpoint của batch hiện tại. results chỉ là
       // payload thay đổi trạng thái để cập nhật trạng thái nhẹ hơn, không
       // được dùng làm log vì sẽ làm mất các dòng endpoint không đổi.
@@ -173,9 +171,7 @@ export function HnthStatusMetrics() {
       // này chỉ ghi log, tránh hai SSE cùng ghi một điểm và làm MapLibre nháy.
       const entries = items.map((item) => toEntry({ ...item, checkedAt: item.checkedAt ?? batch.sentAt }));
       setMonitorLog((current) => [...current, ...entries].slice(-1000));
-    };
-    window.addEventListener("hnth:monitor-batch", onMonitoringBatch);
-    return () => window.removeEventListener("hnth:monitor-batch", onMonitoringBatch);
+    });
   }, [allPoints, continuousMonitoring, monitorConcurrency, updateHnthPoint]);
 
   useEffect(() => {
@@ -201,12 +197,8 @@ export function HnthStatusMetrics() {
     const wardCode = String(item.properties?.wardCode ?? "");
     const administrativeId = administrativeUnits.find((unit) => String(unit.wardCode ?? "") === wardCode)?.id;
     setSelectedHnthPointId(pointId);
-    window.dispatchEvent(new CustomEvent("hnth:focus", {
-      detail: { coordinates: item.geometry.coordinates as [number, number], preserveZoom: true, administrativeId, boundaryWidthMultiplier: 2 },
-    }));
-    window.dispatchEvent(new CustomEvent(MAP_CONTEXT_INFO_EVENT, {
-      detail: { kind: "hnth", pointId, administrativeId, pulseBoundary: true },
-    }));
+    emitAppEvent("hnth:focus", { coordinates: item.geometry.coordinates as [number, number], preserveZoom: true, administrativeId, boundaryWidthMultiplier: 2 });
+    emitAppEvent("map:context-info", { kind: "hnth", pointId, administrativeId, pulseBoundary: true });
   };
 
   const openPointLog = async (item: HnthPointFeature) => {
@@ -216,7 +208,7 @@ export function HnthStatusMetrics() {
     setPointLogEntries([]);
     setPointLogLoading(true);
     try {
-      const response = await hnthFetch(`${apiBase}/api/hnth/monitor-log?pointId=${encodeURIComponent(pointId)}`);
+      const response = await hnthApi.monitorLog(pointId);
       if (!response.ok) return;
       const payload = await response.json() as { entries?: MonitorLogApiEntry[] };
       const entries = (payload.entries ?? []).map((entry) => {
@@ -239,14 +231,12 @@ export function HnthStatusMetrics() {
   };
 
   useEffect(() => {
-    const handleOpenPointLog = (event: Event) => {
-      const pointId = String((event as CustomEvent<{ pointId?: string }>).detail?.pointId ?? "");
+    return onAppEvent("hnth:open-point-log", (detail) => {
+      const pointId = String(detail?.pointId ?? "");
       if (!pointId) return;
       const item = allPoints.find((candidate) => String(candidate.properties?.pointId ?? candidate.id) === pointId);
       if (item) void openPointLog(item);
-    };
-    window.addEventListener("hnth:open-point-log", handleOpenPointLog);
-    return () => window.removeEventListener("hnth:open-point-log", handleOpenPointLog);
+    });
   }, [allPoints]);
 
   useEffect(() => {
@@ -267,10 +257,8 @@ export function HnthStatusMetrics() {
       setTestPointId(String(item.properties?.pointId ?? item.id));
       setTestSequencePosition((index % lostPoints.length) + 1);
       if (administrativeId !== undefined) {
-        window.dispatchEvent(new CustomEvent(MAP_ADMINISTRATIVE_PULSE_EVENT, {
-          // Mỗi lượt Tự động Ping nhận diện địa giới bằng đúng ba chu kỳ viền.
-          detail: { administrativeId, cycles: 3 },
-        }));
+        // Mỗi lượt Tự động Ping nhận diện địa giới bằng đúng ba chu kỳ viền.
+        emitAppEvent("map:administrative-pulse", { administrativeId, cycles: 3 });
       }
       index += 1;
       // Dữ liệu HNTH hiện là mô phỏng: mỗi lượt chờ đủ thời gian chạy hết bốn gói ping.
@@ -371,17 +359,13 @@ export function HnthStatusMetrics() {
                 if (isBachLongVi) {
                   // Bạch Long Vĩ nằm xa đất liền: chỉ đưa tâm bản đồ tới Endpoint,
                   // giữ nguyên mức zoom hiện tại để không thay đổi tỷ lệ người dùng.
-                  window.dispatchEvent(new CustomEvent("hnth:focus", {
-                    detail: { coordinates: item.geometry.coordinates as [number, number], preserveZoom: true },
-                  }));
+                  emitAppEvent("hnth:focus", { coordinates: item.geometry.coordinates as [number, number], preserveZoom: true });
                 } else {
                   // Các điểm còn lại luôn đưa camera về khung toàn cảnh Hải Phòng.
-                  window.dispatchEvent(new Event(FIT_HAIPHONG_OVERVIEW_EVENT));
+                  emitAppEvent("map:fit-haiphong-overview");
                 }
-                window.dispatchEvent(new CustomEvent(MAP_CONTEXT_INFO_EVENT, {
-                  // Nháy độ dày viền 1x → 2x → 3x → 1x, tối đa năm chu kỳ.
-                  detail: { kind: "hnth", pointId, administrativeId, pulseBoundary: true },
-                }));
+                // Nháy độ dày viền 1x → 2x → 3x → 1x, tối đa năm chu kỳ.
+                emitAppEvent("map:context-info", { kind: "hnth", pointId, administrativeId, pulseBoundary: true });
               }}>
                 <i className={detailStatus}/><span><strong>{pointName}</strong><small>IP {String(item.properties?.ipAddress ?? "Chưa cấu hình")} · Gateway {String(item.properties?.gateway ?? "Chưa cấu hình")}</small></span>
               </button>
@@ -396,8 +380,8 @@ export function HnthStatusMetrics() {
                         onClick={() => {
                           const wardCode = String(item.properties?.wardCode ?? "");
                           const administrativeId = administrativeUnits.find((unit) => String(unit.wardCode ?? "") === wardCode)?.id;
-                          window.dispatchEvent(new CustomEvent("hnth:test-point", { detail: { pointId, ipAddress: String(item.properties?.ipAddress ?? ""), runId: Date.now() } }));
-                          if (administrativeId !== undefined) window.dispatchEvent(new CustomEvent(MAP_ADMINISTRATIVE_PULSE_EVENT, { detail: { administrativeId, cycles: 3 } }));
+                          emitAppEvent("hnth:test-point", { pointId, ipAddress: String(item.properties?.ipAddress ?? ""), runId: Date.now() });
+                          if (administrativeId !== undefined) emitAppEvent("map:administrative-pulse", { administrativeId, cycles: 3 });
                         }}
                       ><Zap size={12}/> Test/Ping</button>
                     : <button className="hnth-alert-action connect" type="button" onClick={() => updateHnthPoint(pointId, { status: "connected" })}><Cable size={12}/> Kết nối</button>}

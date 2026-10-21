@@ -4,9 +4,11 @@ import { Cable, CircleOff, Download, FileText, Info, Map, MonitorUp, Network, Ra
 import type { Feature, Point } from "geojson";
 import { toConnectionStatus } from "@haiphong-ops/hnth-protocol";
 import { useAppStore } from "../../core/store";
-import { hnthFetch } from "../../core/hnth-api";
+import { agentsApi, hnthApi } from "../../core/api/clients";
+import { emitAppEvent, onAppEvent } from "../../core/events";
+import { refreshHnthSnapshot, subscribeHnthSnapshots, subscribeHnthStream, type HnthLivePayload } from "../../core/realtime/hnth-realtime";
+import { useHnthLiveStore } from "../../core/realtime/hnth-live-store";
 import { applyHnthPointOverrides, HNTH_LAYER_ID, HNTH_STATUS_LABELS, loadHnthDemoLayer, normalizeHnthStatus, type HnthConnectionStatus, type HnthPointOverride, type HnthStatusStyles } from "../layers/hnth-data-provider";
-import { FIT_HAIPHONG_OVERVIEW_EVENT, MAP_ADMINISTRATIVE_PULSE_EVENT, MAP_CAPTURE_BACKGROUND_EVENT, MAP_CONTEXT_INFO_EVENT } from "../map/map-events";
 import { HnthDisconnectConfirmButton } from "./HnthDisconnectConfirmButton";
 
 type HnthPointFeature = Feature<Point, Record<string, unknown>>;
@@ -96,7 +98,7 @@ async function captureMapBackground(staticOnly = false): Promise<HTMLImageElemen
   // Chỉ yêu cầu MapCanvas chụp một frame khi xuất báo cáo; không giữ
   // preserveDrawingBuffer trong suốt thời gian người dùng thao tác bản đồ.
   const composedDataUrl = await new Promise<string | null>((resolve) => {
-    window.dispatchEvent(new CustomEvent(MAP_CAPTURE_BACKGROUND_EVENT, { detail: { resolve, staticOnly } }));
+    emitAppEvent("map:capture-background", { resolve, staticOnly });
     window.setTimeout(() => resolve(null), 2000);
   });
   if (!composedDataUrl) return null;
@@ -215,11 +217,6 @@ export function HnthPanel({ readOnly = false }: { readOnly?: boolean }) {
   const importInputRef = useRef<HTMLInputElement>(null);
   const presentationWindowRef = useRef<Window | null>(null);
 
-  // Use same-origin /api in local development so the Vite proxy routes
-  // requests to the backend. A hard-coded loopback URL breaks hydration
-  // after reload (and for clients opening the site from another machine).
-  const relayBase = ((import.meta.env.VITE_HNTH_BACKEND_URL as string | undefined) || (import.meta.env.VITE_HNTH_RELAY_URL as string | undefined) || "").replace(/\/$/, "");
-
   const openPresentationWindow = () => {
     const presentationUrl = new URL(window.location.href);
     presentationUrl.searchParams.set("presentation", "1");
@@ -236,18 +233,18 @@ export function HnthPanel({ readOnly = false }: { readOnly?: boolean }) {
   useEffect(() => {
     const loadAgents = async () => {
       try {
-        const response = await hnthFetch(`${relayBase}/api/agents`);
+        const response = await agentsApi.list();
         if (!response.ok) return;
         const nextAgents = await response.json() as Array<{ agentId: string; name: string; status: string; heartbeatSeconds?: number; monitorConfig?: { points?: HnthAssignedPoint[]; [key: string]: unknown } }>;
         setAgents(nextAgents);
       } catch { /* backend chưa sẵn sàng */ }
     };
     void loadAgents();
-  }, [relayBase]);
+  }, []);
 
   const refreshDiscoveredIps = async () => {
     try {
-      const response = await hnthFetch(`${relayBase}/api/hnth/discovered-ips${selectedAgentId ? `?agentId=${encodeURIComponent(selectedAgentId)}` : ""}`);
+      const response = await hnthApi.discoveredIps(selectedAgentId || undefined);
       if (!response.ok) return;
       const payload = await response.json() as { ips?: Array<{ ipAddress?: string; model?: string; vendor?: string; modelVendor?: string; macAddress?: string }> };
       setDiscoveredIps((payload.ips ?? [])
@@ -271,7 +268,7 @@ export function HnthPanel({ readOnly = false }: { readOnly?: boolean }) {
     setSelectedAgentId(agentId);
     try {
       if (restartMonitoring) await setMonitoring(false, pingConcurrency, monitorWaitSeconds, previous);
-      const response = await hnthFetch(`${relayBase}/api/hnth/selected-agent`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ agentId }) });
+      const response = await hnthApi.selectAgent(agentId);
       if (!response.ok) {
         const payload = await response.json().catch(() => ({})) as { error?: string };
         throw new Error(payload.error || `Không lưu được Agent đã chọn (HTTP ${response.status})`);
@@ -292,7 +289,7 @@ export function HnthPanel({ readOnly = false }: { readOnly?: boolean }) {
     setIsScanning(true);
     try {
       const subnets = scanSubnets.split(",").map((item) => item.trim()).filter(Boolean);
-      const response = await hnthFetch(`${relayBase}/api/hnth/scan`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ scanSubnets: subnets, agentId: selectedAgentId || undefined }) });
+      const response = await hnthApi.scan({ scanSubnets: subnets, agentId: selectedAgentId || undefined });
       if (!response.ok) throw new Error(`Scan request failed: ${response.status}`);
       for (const delay of [3000, 7000, 15000, 30000]) window.setTimeout(() => void refreshDiscoveredIps(), delay);
     } catch {
@@ -317,7 +314,7 @@ export function HnthPanel({ readOnly = false }: { readOnly?: boolean }) {
       })
       .filter((item) => item.pointId)
       .map((item) => [item.pointId, item])).values()];
-    const response = await hnthFetch(`${relayBase}/api/hnth/monitor`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ enabled, concurrency, waitSeconds, agentId, points: monitorPoints }) });
+    const response = await hnthApi.setMonitoring({ enabled, concurrency, waitSeconds, agentId, points: monitorPoints });
     if (!response.ok) {
       setContinuousMonitoring(!enabled);
       const message = `Backend từ chối lệnh Giám sát liên tục (${response.status}). Hãy kiểm tra đăng nhập và Backend.`;
@@ -327,9 +324,9 @@ export function HnthPanel({ readOnly = false }: { readOnly?: boolean }) {
     if (enabled) {
       // Khi bắt đầu giám sát, đưa camera về khung tổng quan toàn TP để nhìn
       // đồng thời toàn bộ endpoint và các đường kết nối HNTH.
-      window.dispatchEvent(new Event(FIT_HAIPHONG_OVERVIEW_EVENT));
+      emitAppEvent("map:fit-haiphong-overview");
     }
-    window.dispatchEvent(new CustomEvent("hnth:continuous-monitoring", { detail: { enabled, concurrency, waitSeconds } }));
+    useHnthLiveStore.getState().setMonitoring({ enabled, concurrency, waitSeconds });
   };
 
   const resetHnthStatusesForNewMonitoring = () => {
@@ -351,7 +348,7 @@ export function HnthPanel({ readOnly = false }: { readOnly?: boolean }) {
 
   useEffect(() => {
     void refreshDiscoveredIps();
-  }, [relayBase, selectedAgentId]);
+  }, [selectedAgentId]);
 
   useEffect(() => {
     // Đọc trạng thái mới nhất thay vì giá trị capture lúc render. React StrictMode
@@ -389,7 +386,7 @@ export function HnthPanel({ readOnly = false }: { readOnly?: boolean }) {
     void loadHnthDemoLayer().then((loadedLayer) => {
       if (!cancelled) {
         mergeOperationalLayers([applyHnthPointOverrides(loadedLayer, hnthPointOverrides)]);
-        window.dispatchEvent(new Event("hnth:layer-ready"));
+        emitAppEvent("hnth:layer-ready");
       }
     }).catch(() => undefined);
     return () => { cancelled = true; };
@@ -399,11 +396,6 @@ export function HnthPanel({ readOnly = false }: { readOnly?: boolean }) {
   // Khi relay chưa được cấu hình hoặc mất kết nối, dữ liệu demo vẫn được giữ nguyên.
   useEffect(() => {
     if (!points.length) return;
-    const relayBase = ((import.meta.env.VITE_HNTH_BACKEND_URL as string | undefined) || (import.meta.env.VITE_HNTH_RELAY_URL as string | undefined))?.replace(/\/$/, "");
-    // This endpoint returns the monitoring flag and the complete authoritative
-    // snapshot together. It makes a Guest opened after round 1 hydrate exactly
-    // like a Guest that was already watching the SSE stream.
-    const statusUrl = `${relayBase || ""}/api/hnth/monitor-state`;
     let cancelled = false;
     const handleMonitoringBatch = (
       batch: { end?: number; total?: number; results?: unknown; allResults?: unknown },
@@ -464,11 +456,9 @@ export function HnthPanel({ readOnly = false }: { readOnly?: boolean }) {
         }
       }
       if (changedAdministrativeIds.size) {
-        window.dispatchEvent(new CustomEvent(MAP_ADMINISTRATIVE_PULSE_EVENT, {
-          // Khoanh tự động dùng đúng độ dày chuẩn x2 nét mảnh và chỉ giữ
-          // hiệu ứng khoảng 5 giây, không nhân x2 thêm một lần nữa.
-          detail: { administrativeIds: [...changedAdministrativeIds], cycles: 1, boundaryWidthMultiplier: 2, durationMs: 5000, animate: false },
-        }));
+        // Khoanh tự động dùng đúng độ dày chuẩn x2 nét mảnh và chỉ giữ
+        // hiệu ứng khoảng 5 giây, không nhân x2 thêm một lần nữa.
+        emitAppEvent("map:administrative-pulse", { administrativeIds: [...changedAdministrativeIds], cycles: 1, boundaryWidthMultiplier: 2, durationMs: 5000, animate: false });
       }
     };
     const applyLiveResults = (payload: unknown) => {
@@ -487,10 +477,6 @@ export function HnthPanel({ readOnly = false }: { readOnly?: boolean }) {
         setLiveAgents(snapshot.agents
           .filter((item) => item.agentId)
           .map((item) => ({ agentId: String(item.agentId), name: String(item.name || item.agentId), status: String(item.status || "offline"), version: item.version ? String(item.version) : undefined })));
-        const hnthAgent = snapshot.agents.find((item) => String(item.agentId ?? "") === activeAgentId);
-        window.dispatchEvent(new CustomEvent("hnth:agent-status", {
-          detail: { agentId: activeAgentId, name: hnthAgent?.name || activeAgentId, online: hnthAgent?.status === "online", source: "backend" },
-        }));
       }
       const monitorBatch = (payload as { monitorBatch?: { allResults?: unknown } }).monitorBatch;
       // Agent gửi `results` rút gọn chỉ gồm các thay đổi để tiết kiệm băng
@@ -574,80 +560,44 @@ export function HnthPanel({ readOnly = false }: { readOnly?: boolean }) {
         data: { ...currentLayer.data, features: nextFeatures },
       }]);
     };
-    const load = async () => {
-      try {
-        const response = await hnthFetch(statusUrl);
-        if (!response.ok) return;
-        const payload = await response.json() as { monitoring?: { enabled?: boolean; concurrency?: number; waitSeconds?: number }; results?: unknown };
-        // Initial hydration must not reset the local map. The backend snapshot
-        // is already authoritative and contains the latest round's statuses.
-        if (payload.monitoring) {
-          const enabled = Boolean(payload.monitoring.enabled);
-          setContinuousMonitoring(enabled);
-          window.dispatchEvent(new CustomEvent("hnth:continuous-monitoring", { detail: { enabled, concurrency: payload.monitoring.concurrency, waitSeconds: payload.monitoring.waitSeconds, source: "backend" } }));
-          if (Number.isFinite(payload.monitoring.concurrency)) setPingConcurrency(Math.max(1, Math.min(30, Number(payload.monitoring.concurrency))));
-          if (Number.isFinite(payload.monitoring.waitSeconds)) setMonitorWaitSeconds(Math.max(1, Math.min(10, Number(payload.monitoring.waitSeconds))));
-        }
-        applyLiveResults(payload);
-      } catch { /* demo fallback */ }
+    const applyMonitoringSettings = (monitoring: NonNullable<HnthLivePayload["monitoring"]>) => {
+      // The backend resets the shared state when the admin starts a new
+      // session. Other clients must consume that authoritative snapshot,
+      // not locally reset/overwrite it from a stale React closure.
+      setContinuousMonitoring(Boolean(monitoring.enabled));
+      if (Number.isFinite(monitoring.concurrency)) setPingConcurrency(Math.max(1, Math.min(30, Number(monitoring.concurrency))));
+      if (Number.isFinite(monitoring.waitSeconds)) setMonitorWaitSeconds(Math.max(1, Math.min(10, Number(monitoring.waitSeconds))));
     };
-    const handleLayerReady = () => {
+    // monitor-state trả cờ giám sát và snapshot đầy đủ cùng lúc, nên Guest mở
+    // trang sau vòng 1 vẫn hydrate giống Guest đã xem SSE từ đầu. Initial
+    // hydration must not reset the local map: the snapshot is authoritative.
+    const applySnapshot = (payload: HnthLivePayload) => {
+      if (payload.monitoring) applyMonitoringSettings(payload.monitoring);
+      applyLiveResults(payload);
+    };
+    const stopLayerReady = onAppEvent("hnth:layer-ready", () => {
       // Nếu snapshot đã về trước khi layer được nạp, áp dụng lại ngay. Nếu
       // chưa có snapshot thì đọc lại backend để không phụ thuộc SSE đã đến
       // trước hay sau quá trình khởi tạo bản đồ.
       if (latestLivePayloadRef.current) applyLiveResults(latestLivePayloadRef.current);
-      else void load();
-    };
-    window.addEventListener("hnth:layer-ready", handleLayerReady);
-    void load();
-    let source: EventSource | null = null;
-    const connect = () => {
-      if (cancelled) return;
-      source?.close();
-      source = new EventSource(`${relayBase || ""}/api/hnth/stream`);
-      source.onmessage = (event) => {
-        try {
-          const payload = JSON.parse(event.data) as { type?: string; results?: unknown; monitoring?: { enabled?: boolean; concurrency?: number; waitSeconds?: number }; monitorBatch?: { end?: number; total?: number; results?: unknown; allResults?: unknown } };
-          if (payload.monitoring) {
-            const remoteEnabled = Boolean(payload.monitoring.enabled);
-            // The backend resets the shared state when the admin starts a new
-            // session. Other clients must consume that authoritative snapshot,
-            // not locally reset/overwrite it from a stale React closure.
-            setContinuousMonitoring(remoteEnabled);
-            window.dispatchEvent(new CustomEvent("hnth:continuous-monitoring", { detail: { enabled: remoteEnabled, concurrency: payload.monitoring.concurrency, waitSeconds: payload.monitoring.waitSeconds, source: "backend" } }));
-            if (Number.isFinite(payload.monitoring.concurrency)) setPingConcurrency(Math.max(1, Math.min(30, Number(payload.monitoring.concurrency))));
-            if (Number.isFinite(payload.monitoring.waitSeconds)) setMonitorWaitSeconds(Math.max(1, Math.min(10, Number(payload.monitoring.waitSeconds))));
-          }
-          if (payload.monitorBatch) {
-            handleMonitoringBatch(payload.monitorBatch, payload.monitoring?.enabled ?? continuousMonitoring);
-            // Một nguồn batch duy nhất cho toàn bộ UI HNTH. Component log và
-            // cửa sổ trình chiếu không tự mở SSE riêng nữa.
-            window.dispatchEvent(new CustomEvent("hnth:monitor-batch", { detail: payload.monitorBatch }));
-          }
-          applyLiveResults(payload);
-        } catch { /* bỏ qua sự kiện lỗi định dạng */ }
-      };
-    };
-    connect();
-    // SSE là kênh realtime chính. Snapshot định kỳ giúp phục hồi trạng thái
-    // nếu trình duyệt tạm ngắt/throttle kết nối khi tab chạy nền.
-    // SSE chỉ phát khi có sự kiện. Khi Agent vẫn đang giám sát nhưng không có
-    // thay đổi trạng thái, Guest vẫn phải chủ động lấy snapshot đầy đủ để
-    // khôi phục line/fill và trạng thái mới nhất.
-    const refreshTimer = window.setInterval(() => { void load(); }, continuousMonitoring ? 2000 : 5000);
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === "visible") {
-        connect();
-        void load();
-      }
-    };
-    document.addEventListener("visibilitychange", handleVisibilityChange);
+      else void refreshHnthSnapshot();
+    });
+    // SSE và snapshot định kỳ do core/realtime quản lý (một kết nối cho cả trang).
+    // Khi đang giám sát, snapshot dày hơn để Guest khôi phục line/fill kể cả khi
+    // Agent không gửi thay đổi nào.
+    const stopSnapshots = subscribeHnthSnapshots(continuousMonitoring ? 2000 : 5000, (result) => {
+      if (result.ok) applySnapshot(result.payload);
+    });
+    const stopStream = subscribeHnthStream((payload) => {
+      if (payload.monitoring) applyMonitoringSettings(payload.monitoring);
+      if (payload.monitorBatch) handleMonitoringBatch(payload.monitorBatch, payload.monitoring?.enabled ?? continuousMonitoring);
+      applyLiveResults(payload);
+    });
     return () => {
       cancelled = true;
-      window.clearInterval(refreshTimer);
-      window.removeEventListener("hnth:layer-ready", handleLayerReady);
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
-      source?.close();
+      stopSnapshots();
+      stopStream();
+      stopLayerReady();
     };
   // Khi bật/tắt giám sát, tạo lại handler SSE để closure luôn dùng đúng
   // trạng thái hiện tại; nếu chỉ phụ thuộc points.length, handler cũ có thể
@@ -814,15 +764,12 @@ export function HnthPanel({ readOnly = false }: { readOnly?: boolean }) {
   }, [selectedPointId, selected, setSelectedId]);
 
   useEffect(() => {
-    const onMapSelection = (event: Event) => {
-      const detail = (event as CustomEvent<{ kind?: string; pointId?: string }>).detail;
+    return onAppEvent("map:context-info", (detail) => {
       if (detail?.kind !== "hnth" || !detail.pointId) return;
       if (points.some((item) => String(item.properties?.pointId ?? item.id) === detail.pointId)) {
         setSelectedId(detail.pointId);
       }
-    };
-    window.addEventListener(MAP_CONTEXT_INFO_EVENT, onMapSelection);
-    return () => window.removeEventListener(MAP_CONTEXT_INFO_EVENT, onMapSelection);
+    });
   }, [points, setSelectedId]);
 
   useEffect(() => {
@@ -843,23 +790,19 @@ export function HnthPanel({ readOnly = false }: { readOnly?: boolean }) {
     setIpAddress(String(item.properties?.ipAddress ?? ""));
     setGateway(String(item.properties?.gateway ?? "192.168.1.1"));
     setModel(String(item.properties?.model ?? ""));
-    window.dispatchEvent(new CustomEvent("hnth:focus", {
-      detail: {
-        coordinates: item.geometry.coordinates,
-        // Dùng mức tuyệt đối để kết quả không phụ thuộc khung hình trước đó.
-        // Riêng Bạch Long Vĩ chỉ đổi tâm và giữ nguyên tỷ lệ bản đồ hiện tại.
-        targetZoom: HNTH_MENU_POINT_ZOOM,
-        preserveZoom: pointName.toLocaleLowerCase("vi").includes("bạch long vĩ"),
-        // Điểm nhánh được khoanh bằng viền trắng dày gấp đôi nét mảnh cơ sở.
-        administrativeId,
-        boundaryWidthMultiplier: 2,
-      },
-    }));
-    window.dispatchEvent(new CustomEvent(MAP_CONTEXT_INFO_EVENT, {
-      // Mở Popup Thông tin Endpoint cố định tương ứng với điểm vừa chọn.
-      // Viền x2 đã được thiết lập bởi sự kiện hnth:focus ở trên.
-      detail: { kind: "hnth", pointId: id, administrativeId },
-    }));
+    emitAppEvent("hnth:focus", {
+      coordinates: item.geometry.coordinates as [number, number],
+      // Dùng mức tuyệt đối để kết quả không phụ thuộc khung hình trước đó.
+      // Riêng Bạch Long Vĩ chỉ đổi tâm và giữ nguyên tỷ lệ bản đồ hiện tại.
+      targetZoom: HNTH_MENU_POINT_ZOOM,
+      preserveZoom: pointName.toLocaleLowerCase("vi").includes("bạch long vĩ"),
+      // Điểm nhánh được khoanh bằng viền trắng dày gấp đôi nét mảnh cơ sở.
+      administrativeId,
+      boundaryWidthMultiplier: 2,
+    });
+    // Mở Popup Thông tin Endpoint cố định tương ứng với điểm vừa chọn.
+    // Viền x2 đã được thiết lập bởi sự kiện hnth:focus ở trên.
+    emitAppEvent("map:context-info", { kind: "hnth", pointId: id, administrativeId });
   };
 
   const saveConfig = async (status: HnthConnectionStatus = selectedStatus) => {
@@ -876,7 +819,7 @@ export function HnthPanel({ readOnly = false }: { readOnly?: boolean }) {
     const nextStatus: HnthConnectionStatus = nextIp ? status : "unknown";
     updateHnthPoint(selectedPointId, { ipAddress: nextIp, gateway: gateway.trim(), model: model.trim(), status: nextStatus });
     try {
-      await hnthFetch(`${relayBase}/api/hnth/point-config`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ pointId: selectedPointId, ipAddress: nextIp, modelVendor: model.trim() || undefined }) });
+      await hnthApi.pointConfig({ pointId: selectedPointId, ipAddress: nextIp, modelVendor: model.trim() || undefined });
       if (continuousMonitoring) {
         const assignedPoints = agents.find((agent) => agent.agentId === selectedAgentId)?.monitorConfig?.points;
         const monitorPoints = Array.isArray(assignedPoints)
@@ -885,7 +828,7 @@ export function HnthPanel({ readOnly = false }: { readOnly?: boolean }) {
             pointId: String(item.properties?.pointId ?? item.id),
             ipAddress: String(item.properties?.pointId === selectedPointId ? nextIp : item.properties?.ipAddress ?? ""),
           }));
-        await hnthFetch(`${relayBase}/api/hnth/monitor`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ enabled: true, concurrency: pingConcurrency, waitSeconds: monitorWaitSeconds, agentId: selectedAgentId, points: monitorPoints }) });
+        await hnthApi.setMonitoring({ enabled: true, concurrency: pingConcurrency, waitSeconds: monitorWaitSeconds, agentId: selectedAgentId, points: monitorPoints });
       }
     } catch { /* relay/agent offline; cấu hình local vẫn được lưu */ }
   };
@@ -937,7 +880,7 @@ export function HnthPanel({ readOnly = false }: { readOnly?: boolean }) {
       for (const { pointId, row } of updates) {
         const values = { ipAddress: row.ipAddress, gateway: row.gateway, model: row.modelVendor };
         updateHnthPoint(pointId, { ...values, status: "unknown" });
-        await hnthFetch(`${relayBase}/api/hnth/point-config`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ pointId, ipAddress: row.ipAddress, modelVendor: row.modelVendor || undefined, agentId: selectedAgentId }) });
+        await hnthApi.pointConfig({ pointId, ipAddress: row.ipAddress, modelVendor: row.modelVendor || undefined, agentId: selectedAgentId });
       }
       const selectedAgent = agents.find((agent) => agent.agentId === selectedAgentId);
       const assignedPoints: HnthAssignedPoint[] = updates
@@ -945,13 +888,13 @@ export function HnthPanel({ readOnly = false }: { readOnly?: boolean }) {
         .map(({ pointId, row }) => ({ pointId, name: row.name, ipAddress: row.ipAddress, modelVendor: row.modelVendor }));
       if (selectedAgent && !readOnly) {
         const existingConfig = selectedAgent.monitorConfig || {};
-        const saved = await hnthFetch(`${relayBase}/api/agents/${encodeURIComponent(selectedAgentId)}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ name: selectedAgent.name, heartbeatSeconds: selectedAgent.heartbeatSeconds || 30, monitorConfig: { ...existingConfig, points: assignedPoints } }) });
+        const saved = await agentsApi.update(selectedAgentId, { name: selectedAgent.name, heartbeatSeconds: selectedAgent.heartbeatSeconds || 30, monitorConfig: { ...existingConfig, points: assignedPoints } });
         if (!saved.ok) throw new Error(`Không lưu được danh sách điểm cho Agent (${saved.status}).`);
         setAgents((current) => current.map((agent) => agent.agentId === selectedAgentId ? { ...agent, monitorConfig: { ...existingConfig, points: assignedPoints } } : agent));
       }
       if (continuousMonitoring) {
         const monitorPoints = assignedPoints.map((item) => ({ pointId: item.pointId, ipAddress: item.ipAddress, name: item.name, modelVendor: item.modelVendor }));
-        await hnthFetch(`${relayBase}/api/hnth/monitor`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ enabled: true, concurrency: pingConcurrency, waitSeconds: monitorWaitSeconds, agentId: selectedAgentId, points: monitorPoints }) });
+        await hnthApi.setMonitoring({ enabled: true, concurrency: pingConcurrency, waitSeconds: monitorWaitSeconds, agentId: selectedAgentId, points: monitorPoints });
       }
       window.alert(`Đã nhập và cập nhật ${updates.length}/${imported.length} điểm HNTH.`);
     } catch (error) {
@@ -1009,7 +952,7 @@ export function HnthPanel({ readOnly = false }: { readOnly?: boolean }) {
         <div className="hnth-actions">
           <button className="connect" disabled={readOnly} onClick={() => saveConfig("connected")}><Cable size={14}/> Kết nối</button>
           <HnthDisconnectConfirmButton disabled={readOnly} pointName={String(selected.properties?.name ?? "Điểm HNTH")} onConfirm={() => { if (!readOnly) saveConfig("unconnected"); }} />
-          <button disabled={readOnly} onClick={() => { if (!selectedPointId || readOnly) return; window.dispatchEvent(new CustomEvent("hnth:test-point", { detail: { pointId: selectedPointId, ipAddress: ipAddress.trim(), runId: Date.now() } })); }}><Zap size={14}/> Test</button>
+          <button disabled={readOnly} onClick={() => { if (!selectedPointId || readOnly) return; emitAppEvent("hnth:test-point", { pointId: selectedPointId, ipAddress: ipAddress.trim(), runId: Date.now() }); }}><Zap size={14}/> Test</button>
           <button disabled={readOnly} onClick={() => setModal("info")}><Info size={14}/> Thông tin</button>
         </div>
         <div className="hnth-import-export">

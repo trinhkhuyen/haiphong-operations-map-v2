@@ -1,4 +1,5 @@
-import { clearAccessToken, getAccessToken, refresh } from "./auth";
+import { clearAccessToken, getAccessToken, refresh } from "../auth";
+import { emitAppEvent } from "../events";
 
 export async function hnthFetch(input: RequestInfo | URL, init: RequestInit = {}, retry = true): Promise<Response> {
   const headers = new Headers(init.headers);
@@ -14,6 +15,10 @@ export async function hnthFetch(input: RequestInfo | URL, init: RequestInit = {}
   if (refreshed) return hnthFetch(input, init, false);
 
   clearAccessToken();
-  window.dispatchEvent(new Event("hnth:auth-expired"));
+  emitAppEvent("hnth:auth-expired");
   return response;
+}
+
+export function jsonRequest(method: string, body: unknown): RequestInit {
+  return { method, headers: { "content-type": "application/json" }, body: JSON.stringify(body) };
 }

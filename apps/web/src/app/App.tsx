@@ -12,7 +12,9 @@ import { loadBundledOperationalLayers } from "../features/layers/sample-data";
 import { applyHnthPointOverrides, HNTH_LAYER_ID, loadHnthDemoLayer } from "../features/layers/hnth-data-provider";
 import { HnthPanel } from "../features/conference/HnthPanel";
 import { HnthStatusMetrics } from "../features/conference/HnthStatusMetrics";
-import { FIT_HAIPHONG_OVERVIEW_EVENT } from "../features/map/map-events";
+import { emitAppEvent, onAppEvent } from "../core/events";
+import { subscribeHnthSnapshots } from "../core/realtime/hnth-realtime";
+import { useHnthLiveStore } from "../core/realtime/hnth-live-store";
 import type { OperationalLayer } from "../core/types";
 import { backendEnabled, changePassword, getCurrentUser, login, logout, refresh, updateProfile, type AuthUser } from "../core/auth";
 import { UserAdminPanel } from "../features/admin/UserAdminPanel";
@@ -68,11 +70,15 @@ export function App() {
   const [authModal, setAuthModal] = useState<"login" | "password" | "profile" | null>(null);
   const [authError, setAuthError] = useState("");
   const [authFields, setAuthFields] = useState({ username: "admin", password: "", currentPassword: "", newPassword: "", displayName: "", department: "", phone: "" });
-  const [backendState, setBackendState] = useState<"checking" | "online" | "offline">("checking");
-  const [backendCheckedAt, setBackendCheckedAt] = useState<Date | null>(null);
-  const [agentState, setAgentState] = useState<"checking" | "online" | "offline">("checking");
-  const [agentCheckedAt, setAgentCheckedAt] = useState<Date | null>(null);
-  const [agentDisplayName, setAgentDisplayName] = useState("Agent HNTH");
+  // Trạng thái Backend và Agent đang chọn cho HNTH do core/realtime cập nhật
+  // từ snapshot monitor-state và SSE (một nguồn cho cả trang).
+  const backendState = useHnthLiveStore((state) => state.backend);
+  const backendCheckedAtMs = useHnthLiveStore((state) => state.backendCheckedAt);
+  const agentState = useHnthLiveStore((state) => state.agent.state);
+  const agentCheckedAtMs = useHnthLiveStore((state) => state.agent.checkedAt);
+  const agentDisplayName = useHnthLiveStore((state) => state.agent.name);
+  const backendCheckedAt = backendCheckedAtMs ? new Date(backendCheckedAtMs) : null;
+  const agentCheckedAt = agentCheckedAtMs ? new Date(agentCheckedAtMs) : null;
   const [searchResults, setSearchResults] = useState<PlaceSearchResult[]>([]);
   const [searching, setSearching] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -122,60 +128,22 @@ export function App() {
     setActivePanel("conference");
     setIsSidebarCollapsed(true);
     const timers = [350, 900].map((delay) => window.setTimeout(() => {
-      window.dispatchEvent(new Event(FIT_HAIPHONG_OVERVIEW_EVENT));
+      emitAppEvent("map:fit-haiphong-overview");
       window.dispatchEvent(new Event("resize"));
     }, delay));
     return () => timers.forEach((timer) => window.clearTimeout(timer));
   }, [isPresentationMode, setActivePanel]);
 
-  useEffect(() => { const onExpired = () => setUser(null); window.addEventListener("hnth:auth-expired", onExpired); return () => window.removeEventListener("hnth:auth-expired", onExpired); }, []);
-  useEffect(() => {
-    const openLogin = () => { setUserMenuOpen(false); setAuthError(""); setAuthModal("login"); };
-    window.addEventListener("hnth:open-login", openLogin);
-    return () => window.removeEventListener("hnth:open-login", openLogin);
-  }, []);
+  useEffect(() => onAppEvent("hnth:auth-expired", () => setUser(null)), []);
+  useEffect(() => onAppEvent("hnth:open-login", () => { setUserMenuOpen(false); setAuthError(""); setAuthModal("login"); }), []);
   const roleLabel = user?.role === "admin" ? "Quản trị hệ thống" : user?.role === "operator" ? "Vận hành" : user ? "Chỉ xem" : "Khách truy cập";
   const canSeeMenu = (menu: string) => !user || user.role !== "viewer" || (user.menuPermissions || []).includes(menu);
   const submitLogin = async (event: React.FormEvent) => { event.preventDefault(); try { const result = await login(authFields.username, authFields.password); setUser(result.user); setAuthModal(null); setAuthError(""); } catch (error) { setAuthError(error instanceof Error ? error.message : "Đăng nhập thất bại"); } };
   const submitProfile = async (event: React.FormEvent) => { event.preventDefault(); try { const updated = await updateProfile({ displayName: authFields.displayName, department: authFields.department, phone: authFields.phone }); setUser(updated); setAuthModal(null); setAuthError(""); } catch (error) { setAuthError(error instanceof Error ? error.message : "Cập nhật thất bại"); } };
   const submitPassword = async (event: React.FormEvent) => { event.preventDefault(); try { await changePassword(authFields.currentPassword, authFields.newPassword); setAuthModal(null); setAuthError(""); window.alert("Đã đổi mật khẩu"); } catch (error) { setAuthError(error instanceof Error ? error.message : "Không đổi được mật khẩu"); } };
 
-  useEffect(() => {
-    const backendBase = ((import.meta.env.VITE_HNTH_BACKEND_URL as string | undefined) || (import.meta.env.VITE_HNTH_RELAY_URL as string | undefined) || "").replace(/\/$/, "");
-    let cancelled = false;
-    const check = async () => { try { const response = await fetch(`${backendBase}/api/hnth/monitor-state`, { cache: "no-store" }); if (!cancelled) { setBackendState(response.ok ? "online" : "offline"); setBackendCheckedAt(new Date()); } } catch { if (!cancelled) { setBackendState("offline"); setBackendCheckedAt(new Date()); } } };
-    void check(); const timer = window.setInterval(() => void check(), 10000); return () => { cancelled = true; window.clearInterval(timer); };
-  }, []);
-
-  useEffect(() => {
-    window.dispatchEvent(new CustomEvent("hnth:agent-status", {
-      detail: { online: agentState === "online" },
-    }));
-  }, [agentState]);
-
-  useEffect(() => {
-    const backendBase = ((import.meta.env.VITE_HNTH_BACKEND_URL as string | undefined) || (import.meta.env.VITE_HNTH_RELAY_URL as string | undefined) || "").replace(/\/$/, "");
-    let cancelled = false;
-    // Chỉ hiện trạng thái của agent đang được chọn cho HNTH (monitor_state.agent_id),
-    // không phải agent vừa gửi heartbeat gần nhất khi có nhiều agent cùng kết nối.
-    const apply = (agentId: string, name: string | undefined, online: boolean) => { if (cancelled) return; setAgentState(online ? "online" : "offline"); setAgentDisplayName(name?.trim() || agentId || "Agent HNTH"); setAgentCheckedAt(new Date()); };
-    const check = async () => {
-      try {
-        const response = await fetch(`${backendBase}/api/hnth/monitor-state`, { cache: "no-store" });
-        const payload = await response.json() as { monitoring?: { agentId?: string }; agents?: Array<{ agentId?: string; name?: string; status?: string }> };
-        const agentId = String(payload.monitoring?.agentId ?? "");
-        const agent = payload.agents?.find((item) => item.agentId === agentId);
-        apply(agentId, agent?.name, response.ok && agent?.status === "online");
-      } catch { if (!cancelled) { setAgentState("offline"); setAgentCheckedAt(new Date()); } }
-    };
-    const onBackendAgentStatus = (event: Event) => {
-      const detail = (event as CustomEvent<{ agentId?: string; name?: string; online?: boolean; source?: string }>).detail;
-      if (detail?.source === "backend" && detail.agentId) apply(detail.agentId, detail.name, Boolean(detail.online));
-    };
-    window.addEventListener("hnth:agent-status", onBackendAgentStatus);
-    void check(); const timer = window.setInterval(() => void check(), 10000);
-    return () => { cancelled = true; window.clearInterval(timer); window.removeEventListener("hnth:agent-status", onBackendAgentStatus); };
-  }, []);
+  // Status bar cần snapshot ít nhất mỗi 10 giây kể cả khi HnthPanel chưa có điểm.
+  useEffect(() => subscribeHnthSnapshots(10000, () => undefined), []);
 
   const openSidebarPanel = (panel?: "layers" | "zones" | "saved" | "routing" | "conference" | "agents") => {
     if (panel) setActivePanel(panel);
@@ -184,9 +152,7 @@ export function App() {
     if (panel === "layers" || panel === "conference") {
       // Phát từ chính thao tác click để vẫn hoạt động khi người dùng bấm lại
       // menu đang mở. Chờ một frame để panel mở rộng xong trước khi MapLibre fit.
-      window.requestAnimationFrame(() => {
-        window.dispatchEvent(new Event(FIT_HAIPHONG_OVERVIEW_EVENT));
-      });
+      window.requestAnimationFrame(() => emitAppEvent("map:fit-haiphong-overview"));
     }
   };
 
@@ -255,7 +221,7 @@ export function App() {
         // HnthPanel có thể đã nhận snapshot backend trước khi lớp HNTH được
         // nạp xong. Báo hiệu để panel replay snapshot mới nhất sau lần merge
         // này, tránh F5/reload bị quay lại trạng thái demo/unknown.
-        if (pendingIds.includes(HNTH_LAYER_ID)) window.dispatchEvent(new Event("hnth:layer-ready"));
+        if (pendingIds.includes(HNTH_LAYER_ID)) emitAppEvent("hnth:layer-ready");
 
         // MapLibre đôi khi nhận source mới trước khi style hoàn tất vòng cập nhật đầu
         // tiên: UI báo layer đang bật nhưng canvas chưa vẽ. Thực hiện đúng chu kỳ
