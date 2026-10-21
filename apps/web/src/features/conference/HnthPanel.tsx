@@ -195,7 +195,13 @@ export function HnthPanel({ readOnly = false }: { readOnly?: boolean }) {
   const [scanSubnets, setScanSubnets] = useState("192.168.1.0/24");
   const HNTH_AGENT_ID = "agent-demo";
   const [agents, setAgents] = useState<Array<{ agentId: string; name: string; status: string; heartbeatSeconds?: number; monitorConfig?: { points?: HnthAssignedPoint[]; [key: string]: unknown } }>>([]);
+  // Agent được chọn lưu ở backend (monitor_state.agent_id) và đến cùng snapshot
+  // realtime, nên Guest/Trình chiếu và các Operator khác luôn thấy cùng một agent.
   const [selectedAgentId, setSelectedAgentId] = useState(HNTH_AGENT_ID);
+  // Danh sách + trạng thái online lấy từ snapshot công khai; /api/agents (có
+  // monitorConfig) chỉ tải được khi đã đăng nhập Operator/Admin.
+  const [liveAgents, setLiveAgents] = useState<Array<{ agentId: string; name: string; status: string; version?: string }>>([]);
+  const [agentSelectError, setAgentSelectError] = useState("");
   const [continuousMonitoring, setContinuousMonitoring] = useState(false);
   const [monitoringError, setMonitoringError] = useState("");
   const [pingConcurrency, setPingConcurrency] = useState(() => {
@@ -233,9 +239,6 @@ export function HnthPanel({ readOnly = false }: { readOnly?: boolean }) {
         if (!response.ok) return;
         const nextAgents = await response.json() as Array<{ agentId: string; name: string; status: string; heartbeatSeconds?: number; monitorConfig?: { points?: HnthAssignedPoint[]; [key: string]: unknown } }>;
         setAgents(nextAgents);
-        setSelectedAgentId((current) => nextAgents.some((agent) => agent.agentId === current)
-          ? current
-          : nextAgents.find((agent) => agent.status === "online")?.agentId || nextAgents[0]?.agentId || HNTH_AGENT_ID);
       } catch { /* backend chưa sẵn sàng */ }
     };
     void loadAgents();
@@ -252,6 +255,38 @@ export function HnthPanel({ readOnly = false }: { readOnly?: boolean }) {
     } catch { /* relay chưa cấu hình, giữ danh sách hiện tại */ }
   };
 
+  const [switchingAgent, setSwitchingAgent] = useState(false);
+  const chooseAgent = async (agentId: string) => {
+    const previous = selectedAgentId;
+    if (agentId === previous) return;
+    const nextName = liveAgents.find((agent) => agent.agentId === agentId)?.name || agentId;
+    const previousName = liveAgents.find((agent) => agent.agentId === previous)?.name || previous;
+    // Đang giám sát: dừng hẳn trên agent cũ rồi mới bật lại trên agent mới, để
+    // không có hai agent cùng ping và trộn trạng thái trên bản đồ.
+    const restartMonitoring = continuousMonitoring;
+    if (restartMonitoring && !window.confirm(`Đang Giám sát liên tục bằng "${previousName}".\nChuyển sang "${nextName}" sẽ dừng giám sát trên agent cũ và bắt đầu lại trên agent mới. Tiếp tục?`)) return;
+    setAgentSelectError("");
+    setSwitchingAgent(true);
+    setSelectedAgentId(agentId);
+    try {
+      if (restartMonitoring) await setMonitoring(false, pingConcurrency, monitorWaitSeconds, previous);
+      const response = await hnthFetch(`${relayBase}/api/hnth/selected-agent`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ agentId }) });
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({})) as { error?: string };
+        throw new Error(payload.error || `Không lưu được Agent đã chọn (HTTP ${response.status})`);
+      }
+      if (restartMonitoring) {
+        resetHnthStatusesForNewMonitoring();
+        await setMonitoring(true, pingConcurrency, monitorWaitSeconds, agentId);
+      }
+    } catch (error) {
+      setSelectedAgentId(previous);
+      setAgentSelectError(error instanceof Error ? error.message : "Không lưu được Agent đã chọn");
+    } finally {
+      setSwitchingAgent(false);
+    }
+  };
+
   const requestNetworkScan = async () => {
     setIsScanning(true);
     try {
@@ -266,10 +301,10 @@ export function HnthPanel({ readOnly = false }: { readOnly?: boolean }) {
     }
   };
 
-  const setMonitoring = async (enabled: boolean, concurrency = pingConcurrency, waitSeconds = monitorWaitSeconds) => {
+  const setMonitoring = async (enabled: boolean, concurrency = pingConcurrency, waitSeconds = monitorWaitSeconds, agentId = selectedAgentId) => {
     setMonitoringError("");
     setContinuousMonitoring(enabled);
-    const assignedPoints = agents.find((agent) => agent.agentId === selectedAgentId)?.monitorConfig?.points;
+    const assignedPoints = agents.find((agent) => agent.agentId === agentId)?.monitorConfig?.points;
     const hasAssignment = Array.isArray(assignedPoints);
     // An Agent assignment is authoritative. Never silently expand an imported
     // list (for example 50 points) back to the full demo layer.
@@ -281,7 +316,7 @@ export function HnthPanel({ readOnly = false }: { readOnly?: boolean }) {
       })
       .filter((item) => item.pointId)
       .map((item) => [item.pointId, item])).values()];
-    const response = await hnthFetch(`${relayBase}/api/hnth/monitor`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ enabled, concurrency, waitSeconds, agentId: selectedAgentId, points: monitorPoints }) });
+    const response = await hnthFetch(`${relayBase}/api/hnth/monitor`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ enabled, concurrency, waitSeconds, agentId, points: monitorPoints }) });
     if (!response.ok) {
       setContinuousMonitoring(!enabled);
       const message = `Backend từ chối lệnh Giám sát liên tục (${response.status}). Hãy kiểm tra đăng nhập và Backend.`;
@@ -442,11 +477,18 @@ export function HnthPanel({ readOnly = false }: { readOnly?: boolean }) {
       // đổi; snapshot này sẽ được replay sau sự kiện layer-ready.
       latestLivePayloadRef.current = payload;
       if (cancelled) return;
-      const agents = (payload as { agents?: Array<{ agentId?: string; status?: string }> }).agents;
-      const hnthAgent = Array.isArray(agents) ? agents.find((item) => String(item.agentId ?? "") === selectedAgentId) : undefined;
-      if (hnthAgent) {
+      const snapshot = payload as { agents?: Array<{ agentId?: string; name?: string; status?: string; version?: string | null }>; monitoring?: { agentId?: string } };
+      // Agent được chọn trong snapshot backend là nguồn sự thật (có thể vừa được
+      // đổi từ client khác); trạng thái chỉ phát cho đúng agent đó.
+      const activeAgentId = String(snapshot.monitoring?.agentId ?? "").trim() || selectedAgentId;
+      if (snapshot.monitoring?.agentId) setSelectedAgentId(activeAgentId);
+      if (Array.isArray(snapshot.agents)) {
+        setLiveAgents(snapshot.agents
+          .filter((item) => item.agentId)
+          .map((item) => ({ agentId: String(item.agentId), name: String(item.name || item.agentId), status: String(item.status || "offline"), version: item.version ? String(item.version) : undefined })));
+        const hnthAgent = snapshot.agents.find((item) => String(item.agentId ?? "") === activeAgentId);
         window.dispatchEvent(new CustomEvent("hnth:agent-status", {
-          detail: { agentId: selectedAgentId, online: hnthAgent.status === "online", source: "backend" },
+          detail: { agentId: activeAgentId, name: hnthAgent?.name || activeAgentId, online: hnthAgent?.status === "online", source: "backend" },
         }));
       }
       const monitorBatch = (payload as { monitorBatch?: { allResults?: unknown } }).monitorBatch;
@@ -976,13 +1018,16 @@ export function HnthPanel({ readOnly = false }: { readOnly?: boolean }) {
         </div>
       </div>}
 
+      <label className="hnth-scan-subnets hnth-agent-select"><span>Agent HNTH dùng cho Scan và Giám sát</span><select value={selectedAgentId} onChange={(event) => void chooseAgent(event.target.value)} disabled={!liveAgents.length || readOnly || switchingAgent}>
+          {liveAgents.length ? liveAgents.map((agent) => <option key={agent.agentId} value={agent.agentId}>{agent.status === "online" ? "● " : "○ "}{agent.name}{agent.version ? ` · v${agent.version}` : ""} — {agent.status === "online" ? "online" : "mất kết nối"}</option>) : <option value={selectedAgentId}>{selectedAgentId}</option>}
+        </select>
+        <small>{switchingAgent ? "Đang chuyển agent…" : readOnly ? "Đăng nhập Operator/Admin để đổi Agent." : `${selectedAgentId}${continuousMonitoring ? " · đang Giám sát liên tục; chọn agent khác sẽ chuyển giám sát sang agent đó" : ""}`}</small>
+      </label>
       <div className="hnth-scan-controls">
-        <label className="hnth-scan-subnets"><span>Agent HNTH</span><select value={selectedAgentId} onChange={(event) => setSelectedAgentId(event.target.value)} disabled={!agents.length || readOnly}>
-          {agents.length ? agents.map((agent) => <option key={agent.agentId} value={agent.agentId}>{agent.name} ({agent.agentId})</option>) : <option value={HNTH_AGENT_ID}>{HNTH_AGENT_ID}</option>}
-        </select></label>
         <label className="hnth-scan-subnets"><span>Subnet LAN</span><input value={scanSubnets} onChange={(event) => setScanSubnets(event.target.value)} placeholder="192.168.1.0/24" /></label>
         <button className="hnth-save" type="button" onClick={() => void requestNetworkScan()} disabled={readOnly || isScanning} title="Gửi lệnh cho agent quét mạng LAN"><Zap size={14}/> {isScanning ? "Đang quét..." : "Scan"}</button>
       </div>
+      {agentSelectError && <p className="agent-error">{agentSelectError}</p>}
 
       <label className="hnth-search"><Search size={15}/><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Tìm tên điểm, IP, Gateway..."/></label>
       <div className="hnth-point-list">

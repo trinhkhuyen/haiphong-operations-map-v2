@@ -156,8 +156,25 @@ export function App() {
   useEffect(() => {
     const backendBase = ((import.meta.env.VITE_HNTH_BACKEND_URL as string | undefined) || (import.meta.env.VITE_HNTH_RELAY_URL as string | undefined) || "").replace(/\/$/, "");
     let cancelled = false;
-    const check = async () => { try { const response = await fetch(`${backendBase}/api/agent-status`, { cache: "no-store" }); const payload = await response.json() as { status?: string; name?: string; agentId?: string }; if (!cancelled) { setAgentState(response.ok && payload.status === "online" ? "online" : "offline"); setAgentDisplayName(payload.name?.trim() || "Agent HNTH"); setAgentCheckedAt(new Date()); } } catch { if (!cancelled) { setAgentState("offline"); setAgentCheckedAt(new Date()); } } };
-    void check(); const timer = window.setInterval(() => void check(), 10000); return () => { cancelled = true; window.clearInterval(timer); };
+    // Chỉ hiện trạng thái của agent đang được chọn cho HNTH (monitor_state.agent_id),
+    // không phải agent vừa gửi heartbeat gần nhất khi có nhiều agent cùng kết nối.
+    const apply = (agentId: string, name: string | undefined, online: boolean) => { if (cancelled) return; setAgentState(online ? "online" : "offline"); setAgentDisplayName(name?.trim() || agentId || "Agent HNTH"); setAgentCheckedAt(new Date()); };
+    const check = async () => {
+      try {
+        const response = await fetch(`${backendBase}/api/hnth/monitor-state`, { cache: "no-store" });
+        const payload = await response.json() as { monitoring?: { agentId?: string }; agents?: Array<{ agentId?: string; name?: string; status?: string }> };
+        const agentId = String(payload.monitoring?.agentId ?? "");
+        const agent = payload.agents?.find((item) => item.agentId === agentId);
+        apply(agentId, agent?.name, response.ok && agent?.status === "online");
+      } catch { if (!cancelled) { setAgentState("offline"); setAgentCheckedAt(new Date()); } }
+    };
+    const onBackendAgentStatus = (event: Event) => {
+      const detail = (event as CustomEvent<{ agentId?: string; name?: string; online?: boolean; source?: string }>).detail;
+      if (detail?.source === "backend" && detail.agentId) apply(detail.agentId, detail.name, Boolean(detail.online));
+    };
+    window.addEventListener("hnth:agent-status", onBackendAgentStatus);
+    void check(); const timer = window.setInterval(() => void check(), 10000);
+    return () => { cancelled = true; window.clearInterval(timer); window.removeEventListener("hnth:agent-status", onBackendAgentStatus); };
   }, []);
 
   const openSidebarPanel = (panel?: "layers" | "zones" | "saved" | "routing" | "conference" | "agents") => {

@@ -1592,11 +1592,10 @@ export function MapCanvas() {
       syncHubPulse();
     };
     const onAgentStatus = (event: Event) => {
+      // Sự kiện này luôn mô tả agent đang được chọn cho HNTH (HnthPanel/App lọc sẵn).
       const detail = (event as CustomEvent<{ agentId?: string; online?: boolean }>).detail;
-      if (!detail.agentId || detail.agentId === "agent-demo") {
-        hnthAgentOnlineRef.current = Boolean(detail.online);
-        syncHubPulse();
-      }
+      hnthAgentOnlineRef.current = Boolean(detail.online);
+      syncHubPulse();
     };
     window.addEventListener("hnth:continuous-monitoring", onMonitoring);
     window.addEventListener("hnth:agent-status", onAgentStatus);
