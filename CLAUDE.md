@@ -19,7 +19,7 @@ Agent (Windows tray, Electron)  --HTTPS outbound, Bearer token-->  hnth-backend 
 | `services/hnth-backend` | API + SSE, `src/server.mjs` (1 file, route dạng if-chain), `src/db.mjs` (migrate idempotent lúc khởi động) | Node ESM thuần, không framework, không test |
 | `services/hnth-agent` | Agent LAN: `src/agent.mjs` (logic), `desktop/main.cjs` (Electron tray + tự cập nhật) | Build `.exe` bằng electron-builder |
 | `services/hnth-relay` | Relay in-memory cũ (cổng 8787) | **Lỗi thời** — backend 8788 đã thay thế. Không phát triển thêm |
-| `packages/hnth-protocol` | Type dùng chung | Gần như không được dùng; backend/agent không import |
+| `packages/hnth-protocol` | Hợp đồng dùng chung (ESM thuần + `index.d.ts`): từ vựng trạng thái, `toConnectionStatus`, `classifyProbeResult`, `OPERATOR_COMMAND_TYPES`, `readExeVersion`, `compareVersions` | Web, backend, agent đều import. Bản exe Agent kèm package này qua `extraResources` trong `electron-builder.yml` — thêm file mới vào package thì kiểm tra filter ở đó |
 
 README.md mô tả `packages/contracts`, `services/api`, `infra` — **không tồn tại**, đó là kế hoạch cũ. Tin code, không tin README.
 
@@ -29,7 +29,7 @@ README.md mô tả `packages/contracts`, `services/api`, `infra` — **không t�
 pnpm install                 # nếu báo ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY: CI=true pnpm install --frozen-lockfile
 pnpm check                   # tsc -b apps/web + node --check mọi .mjs/.cjs trong services/ và scripts/ (~15s)
 pnpm check:full              # như trên + unit test + vite build production (~50s)
-pnpm test                    # unit test web (vitest, ~2s): hàm thuần, store (khóa hình dạng persist), CSV, đọc version exe
+pnpm test                    # unit test web (vitest) + hnth-protocol (node:test), ~3s
 pnpm test:e2e                # e2e backend + agent thật trên schema Postgres riêng, cổng ngẫu nhiên (~20s); không có Postgres thì skip
 pnpm dev                     # chỉ frontend, http://127.0.0.1:5173 (proxy /api -> 127.0.0.1:8788)
 pnpm smoke:backend           # smoke test chỉ-đọc vào backend đang chạy (BACKEND_URL, SMOKE_USER/SMOKE_PASSWORD tùy chọn)
@@ -62,8 +62,8 @@ docker compose --env-file .env.source -f docker-compose.source.yml up -d --build
 ## Quy ước & bẫy cần biết
 
 **Trạng thái HNTH có hai từ vựng khác nhau** — đừng trộn:
-- Agent/backend: `online | offline | unknown` (4/4 gói ping = online, ≥50% = unknown, còn lại = offline — xem `ping()` trong `agent.mjs`).
-- Frontend (`HnthConnectionStatus`): `unknown | unconnected | connected | lost`, nhãn trong `HNTH_STATUS_LABELS`. Ánh xạ: không có IP → `unknown`; `online` → `unconnected` ("Chờ kết nối"); `offline` → `lost`. `connected` chỉ đặt thủ công. Ánh xạ này đang bị **lặp 4 chỗ** (`HnthPanel.tsx` ×3, `HnthStatusMetrics.tsx`) — nếu sửa thì sửa hết hoặc gom về `hnth-data-provider.ts`.
+- Agent/backend: `online | offline | unknown` (4/4 gói ping = online, ≥50% = unknown, còn lại = offline — `classifyProbeResult` trong `hnth-protocol`).
+- Frontend (`HnthConnectionStatus` = `ConnectionStatus`): `unknown | unconnected | connected | lost`, nhãn trong `HNTH_STATUS_LABELS`. Ánh xạ duy nhất ở `toConnectionStatus(agentStatus, hasIp)` trong `hnth-protocol`: không có IP → `unknown`; `online` → `unconnected` ("Chờ kết nối"); `offline` → `lost`. `connected` chỉ đặt thủ công.
 - IP rỗng luôn là `unknown`, kể cả khi payload nói khác (backend ép ở `/api/telemetry/ping-results`).
 
 **Giao tiếp giữa module frontend bằng `window` CustomEvent**, không qua store: `hnth:layer-ready`, `hnth:agent-status`, `hnth:auth-expired`, `hnth:open-login`, `hnth:focus`, `hnth:test-point`, `hnth:monitor-batch`, `hnth:continuous-monitoring`, `hnth:open-point-log`, cùng các hằng `*_EVENT` trong `features/map/map-events.ts`. Grep tên event trước khi đổi.

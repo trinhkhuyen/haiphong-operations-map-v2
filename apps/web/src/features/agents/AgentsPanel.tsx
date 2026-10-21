@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Activity, Check, KeyRound, Network, Pencil, RadioTower, RefreshCw, Settings2, Wifi, WifiOff, X } from "lucide-react";
+import { compareVersions, EXE_VERSION_SCAN_BYTES, readExeVersion as readExeVersionBytes } from "@haiphong-ops/hnth-protocol";
 import { hnthFetch } from "../../core/hnth-api";
 
 type SnmpTarget = { targetId?: string; host?: string; port?: number; community?: string; version?: string; oids?: string[] };
@@ -9,33 +10,13 @@ type Agent = {
   monitorConfig?: { scanConcurrency?: number; scanDelayMs?: number; scanScheduleSeconds?: number; probeCount?: number; probeIntervalMs?: number; snmpTargets?: SnmpTarget[] };
 };
 
-// Đọc ProductVersion (UTF-16LE) trong 2 MB đầu file .exe, cùng cách backend làm
-// (readExeVersion trong server.mjs), để hiện version ngay khi chọn file.
+// Đọc version ngay khi chọn file, cùng thuật toán backend dùng khi nhận upload.
 export async function readExeVersion(file: File): Promise<string | null> {
-  const data = new Uint8Array(await file.slice(0, 2 * 1024 * 1024).arrayBuffer());
-  const key = Array.from("ProductVersion\0").flatMap((char) => [char.charCodeAt(0), 0]);
-  for (let index = 0; index + key.length < data.length; index += 2) {
-    if (key.some((byte, offset) => data[index + offset] !== byte)) continue;
-    let cursor = index + key.length;
-    cursor += (4 - (cursor % 4)) % 4;
-    let value = "";
-    for (; cursor + 1 < data.length; cursor += 2) { const code = data[cursor] | (data[cursor + 1] << 8); if (!code) break; value += String.fromCharCode(code); }
-    const match = value.trim().match(/^\d+\.\d+\.\d+(?:[-.][0-9A-Za-z.-]+)?/);
-    if (match) return match[0];
-  }
-  return null;
+  return readExeVersionBytes(new Uint8Array(await file.slice(0, EXE_VERSION_SCAN_BYTES).arrayBuffer()));
 }
 
-// So sánh số theo từng phần (0.2.10 > 0.2.9); chỉ dùng để hiện thông báo hạ cấp.
-export function compareVersions(a: string, b: string) {
-  const left = a.split(/[.-]/).map(Number);
-  const right = b.split(/[.-]/).map(Number);
-  for (let index = 0; index < Math.max(left.length, right.length); index += 1) {
-    const diff = (left[index] || 0) - (right[index] || 0);
-    if (diff) return diff;
-  }
-  return 0;
-}
+// Chỉ dùng để hiện thông báo hạ cấp/cài lại, không chặn thao tác.
+export { compareVersions };
 
 export function AgentsPanel() {
   const [agents, setAgents] = useState<Agent[]>([]);

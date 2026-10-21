@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Cable, ChevronDown, ChevronUp, CircleAlert, CircleHelp, Clock3, FileText, GripHorizontal, RadioTower, X, Zap } from "lucide-react";
 import type { Feature, Point } from "geojson";
+import { toConnectionStatus } from "@haiphong-ops/hnth-protocol";
 import { useAppStore } from "../../core/store";
 import { hnthFetch } from "../../core/hnth-api";
 import { HNTH_LAYER_ID, HNTH_STATUS_LABELS, normalizeHnthStatus, type HnthConnectionStatus } from "../layers/hnth-data-provider";
@@ -112,7 +113,7 @@ export function HnthStatusMetrics() {
           const payload = await response.json() as { results?: Array<{ pointId?: string; ipAddress?: string | null; status?: string; latencyMs?: number | null }> };
           const result = payload.results?.find((item) => item.pointId === pointId);
           const hasIp = Boolean(String(allPoints.find((item) => String(item.properties?.pointId ?? item.id) === pointId)?.properties?.ipAddress ?? "").trim());
-          if (result?.status) updateHnthPoint(pointId, { status: !hasIp ? "unknown" : result.status === "online" ? "unconnected" : result.status === "offline" ? "lost" : "unknown" });
+          if (result?.status) updateHnthPoint(pointId, { status: toConnectionStatus(result.status, hasIp) });
         } catch { /* agent/relay may be offline; popup still shows the local state */ }
       }, 1800);
     };

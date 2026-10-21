@@ -44,7 +44,7 @@ function nodeSources(dir) {
 const tsc = path.join(root, "apps/web/node_modules/.bin", isWindows ? "tsc.CMD" : "tsc");
 run("web: tsc -b", tsc, ["-b", "--pretty", "false"], path.join(root, "apps/web"));
 
-for (const file of [...nodeSources(path.join(root, "services")), ...nodeSources(path.join(root, "scripts"))]) {
+for (const file of [...nodeSources(path.join(root, "services")), ...nodeSources(path.join(root, "packages")), ...nodeSources(path.join(root, "scripts"))]) {
   run(`node --check ${path.relative(root, file).replaceAll("\\", "/")}`, process.execPath, ["--check", file]);
 }
 

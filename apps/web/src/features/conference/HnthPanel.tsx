@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import * as XLSX from "xlsx";
 import { Cable, CircleOff, Download, FileText, Info, Map, MonitorUp, Network, RadioTower, Save, Search, Upload, X, Zap } from "lucide-react";
 import type { Feature, Point } from "geojson";
+import { toConnectionStatus } from "@haiphong-ops/hnth-protocol";
 import { useAppStore } from "../../core/store";
 import { hnthFetch } from "../../core/hnth-api";
 import { applyHnthPointOverrides, HNTH_LAYER_ID, HNTH_STATUS_LABELS, loadHnthDemoLayer, normalizeHnthStatus, type HnthConnectionStatus, type HnthPointOverride, type HnthStatusStyles } from "../layers/hnth-data-provider";
@@ -426,7 +427,7 @@ export function HnthPanel({ readOnly = false }: { readOnly?: boolean }) {
         if (!pointId || !point) continue;
         monitoringSeenPointIdsRef.current.add(pointId);
         const hasIp = Boolean(String(point.properties?.ipAddress ?? "").trim());
-        const nextStatus: HnthConnectionStatus = !hasIp ? "unknown" : item.status === "online" ? "unconnected" : item.status === "offline" ? "lost" : "unknown";
+        const nextStatus: HnthConnectionStatus = toConnectionStatus(item.status, hasIp);
         const previousStatus = monitoringLastStatusRef.current.get(pointId)
           ?? normalizeHnthStatus(useAppStore.getState().hnthPointOverrides[pointId]?.status ?? point.properties?.status);
         // Ghi snapshot trước khi applyLiveResults cập nhật layer/store. Đây là
@@ -525,7 +526,7 @@ export function HnthPanel({ readOnly = false }: { readOnly?: boolean }) {
           // nằm trong layer làm fallback, nếu không endpoint đã bị xóa IP vẫn
           // bị ping/đánh dấu như một endpoint có cấu hình.
           const hasIp = Boolean(reportedIp);
-          const nextStatus: HnthConnectionStatus = !hasIp ? "unknown" : item.status === "online" ? "unconnected" : item.status === "offline" ? "lost" : "unknown";
+          const nextStatus: HnthConnectionStatus = toConnectionStatus(item.status, hasIp);
         if (currentState.hnthPointOverrides[resolvedPointId]?.status !== nextStatus) {
           statusUpdates[resolvedPointId] = { status: nextStatus };
         }
@@ -543,7 +544,7 @@ export function HnthPanel({ readOnly = false }: { readOnly?: boolean }) {
         // Backend phải quyết định IP hiện hành; IP trong feature chỉ là dữ
         // liệu hiển thị cũ và không được dùng lại sau khi người dùng sửa/xóa.
         const hasIp = Boolean(String(reportedIp).trim());
-        const status: HnthConnectionStatus = !hasIp ? "unknown" : live.status === "online" ? "unconnected" : live.status === "offline" ? "lost" : "unknown";
+        const status: HnthConnectionStatus = toConnectionStatus(live.status, hasIp);
         const nextSource = status === "unknown" ? feature.properties?.source : "Dữ liệu thật từ LAN agent";
         const nextDataSource = status === "unknown" ? feature.properties?.dataSource : "live";
         // SSE cũng phát lại snapshot định kỳ. Không thay object/layer nếu trạng thái

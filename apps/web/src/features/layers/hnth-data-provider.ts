@@ -1,9 +1,11 @@
+import type { ConnectionStatus } from "@haiphong-ops/hnth-protocol";
 import type { Feature, FeatureCollection, Geometry, LineString, Point } from "geojson";
 import type { OperationalLayer } from "../../core/types";
 
 export const HNTH_LAYER_ID = "hnth-network";
 
-export type HnthConnectionStatus = "unknown" | "unconnected" | "connected" | "lost";
+// Từ vựng trạng thái hiển thị dùng chung với backend/agent (packages/hnth-protocol).
+export type HnthConnectionStatus = ConnectionStatus;
 
 export interface HnthVisualStyle {
   color: string;

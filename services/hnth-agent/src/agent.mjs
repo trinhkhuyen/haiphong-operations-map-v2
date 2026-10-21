@@ -6,6 +6,7 @@ import { createHash, randomUUID, randomBytes } from "node:crypto";
 import os from "node:os";
 import dgram from "node:dgram";
 import path from "node:path";
+import { classifyProbeResult } from "@haiphong-ops/hnth-protocol";
 const exec = promisify(execFile);
 const configPath = process.env.HNTH_AGENT_CONFIG || fileURLToPath(new URL("../config.json", import.meta.url));
 const config = JSON.parse(await readFile(configPath, "utf8"));
@@ -117,16 +118,9 @@ async function ping(point) {
   const loss = Math.round((1 - samples.length / probeCount(point)) * 10000) / 100;
   const latency = samples.length ? Math.round(samples.reduce((sum, value) => sum + value, 0) / samples.length) : null;
   const jitter = samples.length > 1 ? Math.round(samples.slice(1).reduce((sum, value, index) => sum + Math.abs(value - samples[index]), 0) / (samples.length - 1) * 100) / 100 : 0;
-  const successfulProbes = samples.length;
-  // A single successful ICMP reply is not enough to call an endpoint online.
-  // With the default four probes: 4/4 is online, 2-3/4 is inconclusive, and
-  // 0-1/4 is offline. The frontend maps these to Chờ kết nối, Chưa xác định,
-  // and Mất kết nối respectively.
-  const status = successfulProbes === probeCount(point)
-    ? "online"
-    : successfulProbes * 2 >= probeCount(point)
-      ? "unknown"
-      : "offline";
+  // Ngưỡng online/unknown/offline dùng chung trong hnth-protocol; frontend hiển
+  // thị tương ứng Chờ kết nối, Chưa xác định, Mất kết nối.
+  const status = classifyProbeResult(samples.length, probeCount(point));
   return { pointId: point.pointId, name: point.name || point.pointId, ipAddress: point.ipAddress, status, latencyMs: latency, packetLossPct: loss, jitterMs: jitter, probeCount: probeCount(point), checkedAt: new Date().toISOString() };
 }
 
