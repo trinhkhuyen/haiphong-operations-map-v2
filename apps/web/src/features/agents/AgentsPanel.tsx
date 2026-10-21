@@ -5,8 +5,37 @@ import { hnthFetch } from "../../core/hnth-api";
 type SnmpTarget = { targetId?: string; host?: string; port?: number; community?: string; version?: string; oids?: string[] };
 type Agent = {
   agentId: string; name: string; status: string; lastSeenAt?: string | null; version?: string | null; heartbeatSeconds?: number;
+  lastUpdate?: { version: string; status: "success" | "failed"; detail?: string | null; reportedAt: string } | null;
   monitorConfig?: { scanConcurrency?: number; scanDelayMs?: number; scanScheduleSeconds?: number; probeCount?: number; probeIntervalMs?: number; snmpTargets?: SnmpTarget[] };
 };
+
+// Đọc ProductVersion (UTF-16LE) trong 2 MB đầu file .exe, cùng cách backend làm
+// (readExeVersion trong server.mjs), để hiện version ngay khi chọn file.
+async function readExeVersion(file: File): Promise<string | null> {
+  const data = new Uint8Array(await file.slice(0, 2 * 1024 * 1024).arrayBuffer());
+  const key = Array.from("ProductVersion\0").flatMap((char) => [char.charCodeAt(0), 0]);
+  for (let index = 0; index + key.length < data.length; index += 2) {
+    if (key.some((byte, offset) => data[index + offset] !== byte)) continue;
+    let cursor = index + key.length;
+    cursor += (4 - (cursor % 4)) % 4;
+    let value = "";
+    for (; cursor + 1 < data.length; cursor += 2) { const code = data[cursor] | (data[cursor + 1] << 8); if (!code) break; value += String.fromCharCode(code); }
+    const match = value.trim().match(/^\d+\.\d+\.\d+(?:[-.][0-9A-Za-z.-]+)?/);
+    if (match) return match[0];
+  }
+  return null;
+}
+
+// So sánh số theo từng phần (0.2.10 > 0.2.9); chỉ dùng để hiện thông báo hạ cấp.
+function compareVersions(a: string, b: string) {
+  const left = a.split(/[.-]/).map(Number);
+  const right = b.split(/[.-]/).map(Number);
+  for (let index = 0; index < Math.max(left.length, right.length); index += 1) {
+    const diff = (left[index] || 0) - (right[index] || 0);
+    if (diff) return diff;
+  }
+  return 0;
+}
 
 export function AgentsPanel() {
   const [agents, setAgents] = useState<Agent[]>([]);
@@ -82,21 +111,32 @@ export function AgentsPanel() {
     finally { setTokenBusy(false); }
   };
 
+  const selectReleaseFile = async (file: File | null) => {
+    setReleaseFile(file); setReleaseVersion(""); setReleaseMessage("");
+    if (!file) return;
+    if (!file.name.toLowerCase().endsWith(".exe")) { setReleaseMessage("Chỉ chấp nhận file Agent dạng .exe."); return; }
+    const version = await readExeVersion(file).catch(() => null);
+    if (!version) { setReleaseMessage("Không đọc được version trong file này. Hãy chọn file Agent build bằng electron-builder."); return; }
+    setReleaseVersion(version);
+    // Cho phép cả hạ cấp và cài lại đúng bản đang chạy: chỉ thông báo, không chặn.
+    if (editing?.version === version) setReleaseMessage(`Agent đang chạy bản ${version}; bấm Cập nhật để cài lại đúng bản này.`);
+    else if (editing?.version && compareVersions(version, editing.version) < 0) setReleaseMessage(`Bản ${version} cũ hơn bản đang chạy (${editing.version}); bấm Cập nhật để hạ cấp.`);
+  };
+
   const deployUpdate = async () => {
-    if (!editing || !releaseFile || !releaseVersion.trim()) { setReleaseMessage("Chọn file .exe và nhập version mới trước khi cập nhật."); return; }
-    if (!releaseFile.name.toLowerCase().endsWith(".exe")) { setReleaseMessage("Chỉ chấp nhận file Agent dạng .exe."); return; }
+    if (!editing || !releaseFile || !releaseVersion) { setReleaseMessage("Chọn file Agent .exe hợp lệ trước khi cập nhật."); return; }
     setReleaseBusy(true); setReleaseMessage("");
     try {
-      const query = `?version=${encodeURIComponent(releaseVersion.trim())}&fileName=${encodeURIComponent(releaseFile.name)}`;
+      const query = `?version=${encodeURIComponent(releaseVersion)}&fileName=${encodeURIComponent(releaseFile.name)}`;
       const upload = await hnthFetch(`/api/agent-releases${query}`, { method: "POST", headers: { "content-type": "application/octet-stream" }, body: releaseFile });
       const uploaded = await upload.json().catch(() => ({})) as { version?: string; sha256?: string; error?: string };
       if (!upload.ok || !uploaded.sha256) throw new Error(uploaded.error || `Không tải được bản cập nhật (HTTP ${upload.status})`);
       // Backend tự điền đường dẫn tải và SHA-256 từ bản release vừa lưu; Agent ghép
       // đường dẫn đó với backendUrl của chính nó nên không phụ thuộc địa chỉ trình duyệt.
-      const command = await hnthFetch(`/api/agents/${encodeURIComponent(editing.agentId)}/commands`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ type: "agent-update", version: uploaded.version || releaseVersion.trim() }) });
+      const command = await hnthFetch(`/api/agents/${encodeURIComponent(editing.agentId)}/commands`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ type: "agent-update", version: uploaded.version || releaseVersion }) });
       const payload = await command.json().catch(() => ({})) as { error?: string };
       if (!command.ok) throw new Error(payload.error || `Không gửi được lệnh cập nhật (HTTP ${command.status})`);
-      setReleaseMessage(`Đã gửi bản ${releaseVersion.trim()} cho Agent. Agent sẽ tự thoát, cập nhật và khởi động lại; phiên bản mới hiện ở đây sau khoảng 1 phút.`);
+      setReleaseMessage(`Đã gửi bản ${uploaded.version || releaseVersion} cho Agent. Agent sẽ tự thoát, cập nhật và khởi động lại; phiên bản mới hiện ở đây sau khoảng 1 phút.`);
       setReleaseFile(null);
     } catch (updateError) { setReleaseMessage(updateError instanceof Error ? updateError.message : "Cập nhật Agent thất bại."); }
     finally { setReleaseBusy(false); }
@@ -146,7 +186,7 @@ export function AgentsPanel() {
             <section className="agent-config-group agent-token-group"><h3><KeyRound size={16}/>Token Agent</h3><div className="agent-token-row"><input type="text" value={tokenDraft} onChange={(event) => setTokenDraft(event.target.value)} placeholder="Tạo hoặc nhập token mới" autoComplete="off" spellCheck={false} /><button type="button" onClick={generateToken} disabled={tokenBusy}>Tạo</button><button type="button" onClick={() => void changeToken()} disabled={tokenBusy || !tokenDraft.trim()}>Đổi</button></div><p>“Tạo” chỉ điền token vào ô nhập. Chỉ nút “Đổi” mới gửi token xuống Agent.</p>{tokenMessage && <p className="agent-token-message">{tokenMessage}</p>}</section>
             <section className="agent-config-group"><h3><Activity size={16}/>Giám sát mạng</h3><div className="agent-form-grid agent-form-grid-3"><label>Số ping mỗi điểm<input type="number" min="1" max="10" value={probeCount} onChange={(event) => setProbeCount(Number(event.target.value))} /></label><label>Khoảng cách ping (ms)<input type="number" min="0" value={probeIntervalMs} onChange={(event) => setProbeIntervalMs(Number(event.target.value))} /></label><label>Song song khi scan<input type="number" min="1" max="128" value={scanConcurrency} onChange={(event) => setScanConcurrency(Number(event.target.value))} /></label><label>Nghỉ giữa batch (ms)<input type="number" min="0" value={scanDelayMs} onChange={(event) => setScanDelayMs(Number(event.target.value))} /></label><label>Lịch scan (giây, 0=tắt)<input type="number" min="0" value={scanScheduleSeconds} onChange={(event) => setScanScheduleSeconds(Number(event.target.value))} /></label></div><p>Agent sẽ gửi latency, packet loss và jitter về Backend sau mỗi vòng kiểm tra.</p></section>
             <section className="agent-config-group"><h3><Network size={16}/>SNMP v2c</h3><p>Khai báo dạng JSON. Mỗi target gồm host, port, community, version và danh sách OID.</p><textarea value={snmpTargetsText} onChange={(event) => setSnmpTargetsText(event.target.value)} spellCheck={false} rows={8} placeholder={'[{"targetId":"switch-core","host":"10.0.0.1","port":161,"community":"readonly","version":"2c","oids":["1.3.6.1.2.1.1.3.0"]}]'} /></section>
-            <section className="agent-config-group agent-version-group"><h3><RefreshCw size={16}/>Phiên bản & cập nhật</h3><div><span>Phiên bản hiện tại</span><strong>{editing.version || "Chưa báo phiên bản"}</strong></div><div className="agent-update-fields"><label>Version mới<input value={releaseVersion} onChange={(event) => setReleaseVersion(event.target.value)} placeholder="Ví dụ: 0.1.1" /></label><label>File Agent (.exe)<input type="file" accept=".exe,application/vnd.microsoft.portable-executable" onChange={(event) => setReleaseFile(event.target.files?.[0] || null)} /></label><button className="primary-button" type="button" disabled={releaseBusy} onClick={() => void deployUpdate()}><RefreshCw size={15}/> {releaseBusy ? "Đang cập nhật…" : "Cập nhật"}</button></div>{releaseMessage && <p className="agent-update-message">{releaseMessage}</p>}<p>Chỉ khi bấm “Cập nhật”, Backend mới phát hành file và gửi lệnh cập nhật cho Agent. Agent xác minh SHA-256 trước khi thay thế file đang chạy.</p></section>
+            <section className="agent-config-group agent-version-group"><h3><RefreshCw size={16}/>Phiên bản & cập nhật</h3><div><span>Phiên bản hiện tại</span><strong>{editing.version || "Chưa báo phiên bản"}</strong></div><div className="agent-update-fields"><label>File Agent (.exe)<input type="file" accept=".exe,application/vnd.microsoft.portable-executable" onChange={(event) => void selectReleaseFile(event.target.files?.[0] || null)} /></label><div><span>Version trong file</span><strong>{releaseVersion || "—"}</strong></div><button className="primary-button" type="button" disabled={releaseBusy || !releaseVersion} onClick={() => void deployUpdate()}><RefreshCw size={15}/> {releaseBusy ? "Đang cập nhật…" : "Cập nhật"}</button></div>{releaseMessage && <p className="agent-update-message">{releaseMessage}</p>}{editing.lastUpdate && <p className="agent-update-message">Lần cập nhật gần nhất ({new Date(editing.lastUpdate.reportedAt).toLocaleString("vi-VN")}): bản {editing.lastUpdate.version} — {editing.lastUpdate.status === "success" ? "thành công" : `thất bại: ${editing.lastUpdate.detail || "không rõ lý do"}`}</p>}<p>Chỉ khi bấm “Cập nhật”, Backend mới phát hành file và gửi lệnh cập nhật cho Agent. Agent xác minh SHA-256 trước khi thay thế file đang chạy.</p></section>
           </div>}
           {error && <div className="agent-modal-error">{error}</div>}
           <footer><button className="secondary-button" onClick={() => setEditing(null)}>Hủy</button><button className="primary-button" onClick={() => void save()}><Check size={15}/>Lưu cấu hình</button></footer>

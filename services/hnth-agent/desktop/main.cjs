@@ -36,13 +36,24 @@ function createTrayIcon() {
   return nativeImage.createFromBuffer(fs.readFileSync(iconPath));
 }
 
+// agentId đọc lại từ config mỗi lần làm mới menu: Agent có thể đổi id khi
+// phát hiện bản copy và tự enroll (xem register() trong agent.mjs).
+function currentAgentId() {
+  try { return JSON.parse(fs.readFileSync(configPath, "utf8")).agentId || "chưa có"; } catch { return "chưa có"; }
+}
+
 function updateMenu() {
   if (!tray) return;
+  const version = app.getVersion();
+  tray.setToolTip(`Agent HNTH v${version} - ${agentStatus}`);
   tray.setContextMenu(Menu.buildFromTemplate([
     { label: `Agent HNTH: ${agentStatus}`, enabled: false },
+    { label: `Phiên bản: ${version}`, enabled: false },
+    { label: `Agent ID: ${currentAgentId()}`, enabled: false },
     { type: "separator" },
     { label: "Mở file cấu hình", click: () => shell.openPath(configPath) },
-    { label: "Mở thư mục Agent", click: () => shell.openPath(agentRoot) },
+    // Thư mục chứa config (cạnh file .exe), không phải thư mục giải nén tạm của bản portable.
+    { label: "Mở thư mục Agent", click: () => shell.openPath(path.dirname(configPath)) },
     { type: "separator" },
     { label: "Thoát Agent HNTH", click: () => app.quit() },
   ]));
@@ -72,9 +83,9 @@ app.whenReady().then(async () => {
   app.setAppUserModelId("vn.haiphong.ops.hnth-agent");
   if (!process.env.HNTH_AGENT_CONFIG && isPackaged) configPath = resolvePackagedConfigPath();
   tray = new Tray(createTrayIcon());
-  tray.setToolTip("Agent HNTH đang chạy");
   updateMenu();
   void startAgent();
+  setInterval(updateMenu, 15000);
 });
 
 app.on("window-all-closed", (event) => event.preventDefault());

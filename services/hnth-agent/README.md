@@ -42,12 +42,12 @@ File sẽ nằm trong `outputs/hnth-agent`. Khi chạy, Agent hoạt động n�
 
 ## Cập nhật từ giao diện Web
 
-Trong menu **Agents → sửa Agent → Cấu hình nâng cao → Phiên bản & cập nhật**, Admin nhập version mới, chọn file `.exe` rồi bấm **Cập nhật**:
+Trong menu **Agents → sửa Agent → Cấu hình nâng cao → Phiên bản & cập nhật**, Admin chọn file `.exe` rồi bấm **Cập nhật**. Không cần nhập version: giao diện và backend đều tự đọc `ProductVersion` mà electron-builder ghi vào file. Popup cũng hiện kết quả của lần cập nhật gần nhất, kèm lý do nếu thất bại. Có thể cài bản mới hơn, cài lại đúng bản đang chạy, hoặc hạ cấp về bản cũ; với hai trường hợp sau giao diện chỉ hiện thông báo, không chặn. Hạ cấp xuống dưới 0.2.2 thì các lần cập nhật từ xa sau đó dùng updater cũ, dễ lỗi; hạ xuống 0.1.x thì không cập nhật từ xa được nữa.
 
-1. Backend lưu file vào `agent-releases` (Docker: volume `agent_releases`) và tính SHA-256.
+1. Backend lưu file vào `agent-releases` (Docker: volume `agent_releases`), đọc version từ file và tính SHA-256.
 2. Backend tạo lệnh `agent-update` gồm version, SHA-256 và **đường dẫn tương đối** `/api/agent-releases/<version>?agentId=…`. Agent ghép đường dẫn này với `backendUrl` của chính nó, nên máy ở LAN nào tải được backend thì tải được bản cập nhật.
 3. Agent tải file, kiểm tra SHA-256, chép `apply-update.ps1` ra thư mục `updates\` cạnh config, khởi chạy script này ở chế độ ẩn rồi thoát.
-4. Script chờ Agent và launcher portable nhả file, sao lưu `<exe>.previous`, thay file, rồi khởi động lại Agent. Nếu lỗi, script khôi phục bản cũ và vẫn khởi động lại.
+4. Script chờ Agent thoát rồi đổi tên exe cũ thành `<exe>.previous`; bước đổi tên chỉ thành công khi launcher portable đã nhả file. Sau đó script ghi exe mới thành một file mới và khởi động lại Agent. Mọi thao tác file đều tự thử lại, vì Windows Defender thường khóa exe trong chốc lát để quét. Nếu lỗi, script khôi phục bản cũ và vẫn khởi động lại.
 5. Agent mới đọc `update-result.json` và báo kết quả cho Backend; phiên bản mới hiện trong menu Agents sau khoảng 1 phút.
 
-Lưu ý: các bản **0.1.x** có lỗi ở bước updater (Agent thoát nhưng không bao giờ được thay file và khởi động lại), nên chỉ cập nhật từ xa được sau khi mỗi máy đã được cài tay bản **0.2.0** trở lên một lần.
+Lưu ý: updater nằm trong chính bản Agent đang chạy. Bản **0.1.x** hỏng hẳn ở bước này; bản **0.2.0–0.2.1** hay thất bại khi Defender quét file. Mỗi máy cần cài tay bản **0.2.2** trở lên một lần, sau đó mới cập nhật từ xa ổn định.

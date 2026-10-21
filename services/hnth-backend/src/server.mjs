@@ -2,7 +2,7 @@ import http from "node:http";
 import crypto from "node:crypto";
 import path from "node:path";
 import { createReadStream, createWriteStream } from "node:fs";
-import { mkdir, unlink, rename } from "node:fs/promises";
+import { mkdir, unlink, rename, open } from "node:fs/promises";
 import { once } from "node:events";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
@@ -43,6 +43,26 @@ async function writeRelease(req, filePath) {
     await unlink(filePath).catch(() => {});
     throw error;
   }
+}
+// Đọc chuỗi ProductVersion (UTF-16LE) trong resource VS_VERSIONINFO của file .exe.
+// Với bản portable của electron-builder, resource của launcher nằm trong vài trăm KB
+// đầu file, trước phần dữ liệu nén, nên chỉ cần đọc 2 MB đầu.
+const productVersionKey = Buffer.from("ProductVersion\0", "utf16le");
+async function readExeVersion(filePath) {
+  const handle = await open(filePath, "r");
+  try {
+    const { buffer, bytesRead } = await handle.read(Buffer.alloc(2 * 1024 * 1024), 0, 2 * 1024 * 1024, 0);
+    const data = buffer.subarray(0, bytesRead);
+    for (let index = data.indexOf(productVersionKey); index >= 0; index = data.indexOf(productVersionKey, index + 1)) {
+      let cursor = index + productVersionKey.length;
+      cursor += (4 - (cursor % 4)) % 4;
+      let value = "";
+      for (; cursor + 1 < data.length; cursor += 2) { const code = data.readUInt16LE(cursor); if (!code) break; value += String.fromCharCode(code); }
+      const match = value.trim().match(/^\d+\.\d+\.\d+(?:[-.][0-9A-Za-z.-]+)?/);
+      if (match) return match[0];
+    }
+    return null;
+  } finally { await handle.close(); }
 }
 function broadcast(event) { const payload = `data: ${JSON.stringify(event)}\n\n`; for (const client of sseClients) { try { client.write(payload); } catch { sseClients.delete(client); } } }
 async function currentRealtimeState() {
@@ -197,19 +217,26 @@ const server = http.createServer(async (req, res) => {
     }
     if (url.pathname === "/api/agent-releases" && req.method === "POST") {
       if (!requireRole(user, "admin")) return json(res, 403, { error: "admin required" });
-      const version = safeReleaseVersion(url.searchParams.get("version"));
       const fileName = safeReleaseFileName(url.searchParams.get("fileName"));
-      if (!version || !fileName.toLowerCase().endsWith(".exe")) return json(res, 400, { error: "version hợp lệ và file .exe là bắt buộc" });
+      if (!fileName.toLowerCase().endsWith(".exe")) return json(res, 400, { error: "Chỉ chấp nhận file Agent dạng .exe" });
       await mkdir(releaseRoot, { recursive: true });
-      const finalPath = path.join(releaseRoot, `hnth-agent-${version}.exe`);
-      const tempPath = `${finalPath}.${crypto.randomUUID()}.upload`;
+      const tempPath = path.join(releaseRoot, `${crypto.randomUUID()}.upload`);
       const uploaded = await writeRelease(req, tempPath);
+      // Version lấy từ chính file .exe (ProductVersion do electron-builder ghi), không
+      // dựa vào số người dùng gõ: Agent báo về đúng version này sau khi cập nhật.
+      const version = safeReleaseVersion(await readExeVersion(tempPath));
+      const requested = url.searchParams.get("version");
+      if (!version || (requested && safeReleaseVersion(requested) !== version)) {
+        await unlink(tempPath).catch(() => {});
+        return json(res, 400, { error: version ? `File là bản ${version}, không phải ${requested}` : "Không đọc được version trong file .exe; hãy dùng file Agent build bằng electron-builder" });
+      }
+      const finalPath = path.join(releaseRoot, `hnth-agent-${version}.exe`);
       await unlink(finalPath).catch(() => {});
       await rename(tempPath, finalPath);
       const result = await pool.query("INSERT INTO agent_releases(version,file_name,file_path,sha256,size_bytes,created_by) VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT(version) DO UPDATE SET file_name=excluded.file_name,file_path=excluded.file_path,sha256=excluded.sha256,size_bytes=excluded.size_bytes,created_by=excluded.created_by,created_at=now() RETURNING version,file_name AS \"fileName\",sha256,size_bytes AS \"sizeBytes\"", [version, fileName, finalPath, uploaded.sha256, uploaded.size, user.id]);
       return json(res, 201, result.rows[0]);
     }
-    if (url.pathname === "/api/agents" && req.method === "GET") { if (!requireRole(user, "operator")) return json(res, 403, { error: "forbidden" }); const rows = await pool.query("SELECT agent_id AS \"agentId\",name,status,last_seen_at AS \"lastSeenAt\",version,heartbeat_seconds AS \"heartbeatSeconds\",monitor_config AS \"monitorConfig\" FROM agents ORDER BY name,agent_id"); const now = Date.now(); const agents = rows.rows.map((agent) => ({ ...agent, status: agent.lastSeenAt && now - new Date(agent.lastSeenAt).getTime() < 30000 ? "online" : "offline" })); return json(res, 200, agents); }
+    if (url.pathname === "/api/agents" && req.method === "GET") { if (!requireRole(user, "operator")) return json(res, 403, { error: "forbidden" }); const rows = await pool.query("SELECT a.agent_id AS \"agentId\",a.name,a.status,a.last_seen_at AS \"lastSeenAt\",a.version,a.heartbeat_seconds AS \"heartbeatSeconds\",a.monitor_config AS \"monitorConfig\",(SELECT json_build_object('version',e.version,'status',e.status,'detail',e.detail,'reportedAt',e.reported_at) FROM agent_update_events e WHERE e.agent_id=a.agent_id ORDER BY e.reported_at DESC LIMIT 1) AS \"lastUpdate\" FROM agents a ORDER BY a.name,a.agent_id"); const now = Date.now(); const agents = rows.rows.map((agent) => ({ ...agent, status: agent.lastSeenAt && now - new Date(agent.lastSeenAt).getTime() < 30000 ? "online" : "offline" })); return json(res, 200, agents); }
     if (url.pathname.startsWith("/api/agents/") && url.pathname.endsWith("/token") && req.method === "POST") { if (!requireRole(user, "admin")) return json(res, 403, { error: "forbidden" }); const agentId = decodeURIComponent(url.pathname.split("/")[3]); const body = await readJson(req); const newToken = String(body.token || "").trim(); if (newToken.length < 16) return json(res, 400, { error: "Token phải có ít nhất 16 ký tự" }); const found = await pool.query("SELECT agent_id FROM agents WHERE agent_id=$1", [agentId]); if (!found.rowCount) return json(res, 404, { error: "agent not found" }); await pool.query("INSERT INTO commands(agent_id,type,payload) VALUES($1,'agent-config',$2)", [agentId, JSON.stringify({ token: newToken })]); return json(res, 202, { accepted: true, agentId }); }
     if (url.pathname.startsWith("/api/agents/") && req.method === "PATCH") { if (!requireRole(user, "admin")) return json(res, 403, { error: "forbidden" }); const agentId = decodeURIComponent(url.pathname.split("/")[3]); const body = await readJson(req); const name = String(body.name || "").trim(); const heartbeatSeconds = Math.max(5, Math.min(30, Number(body.heartbeatSeconds || 30))); if (!name) return json(res, 400, { error: "name is required" }); const config = body.monitorConfig && typeof body.monitorConfig === "object" ? body.monitorConfig : {}; const newToken = String(body.token || "").trim(); const result = await pool.query("UPDATE agents SET name=$1,heartbeat_seconds=$2,monitor_config=$3 WHERE agent_id=$4 RETURNING agent_id AS \"agentId\",name,status,last_seen_at AS \"lastSeenAt\",version,heartbeat_seconds AS \"heartbeatSeconds\",monitor_config AS \"monitorConfig\"", [name, heartbeatSeconds, JSON.stringify(config), agentId]); if (result.rowCount) { const payload = { heartbeatSeconds, ...config, ...(newToken ? { token: newToken } : {}) }; await pool.query("INSERT INTO commands(agent_id,type,payload) VALUES($1,'agent-config',$2)", [agentId, JSON.stringify(payload)]); } return result.rowCount ? json(res, 200, result.rows[0]) : json(res, 404, { error: "agent not found" }); }
     if (url.pathname.startsWith("/api/agents/") && url.pathname.endsWith("/commands") && req.method === "POST") { if (!requireRole(user, "operator")) return json(res, 403, { error: "forbidden" }); const body = await readJson(req); const agentId = url.pathname.split("/")[3]; const type = String(body.type || ""); const allowed = new Set(["scan-local-network", "test-point", "point-config", "monitor-start", "monitor-stop", "agent-update"]); if (!allowed.has(type)) return json(res, 400, { error: "unsupported command" }); if (type === "agent-update" && !requireRole(user, "admin")) return json(res, 403, { error: "admin required for agent updates" }); let { type: ignored, ...payload } = body;
