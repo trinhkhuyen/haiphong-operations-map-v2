@@ -8,7 +8,7 @@ Gửi cho Claude:
 
 > Đọc `CLAUDE.md` và `docs/REFACTOR-HANDOFF.md`. Refactor module hóa đã xong; chọn việc tiếp theo trong mục "Việc tiếp theo đề xuất".
 
-Trước mỗi thay đổi: `pnpm check && pnpm test && pnpm test:e2e` phải đạt (mốc xanh hiện tại: web 57, protocol 8, backend 14, agent 19 unit test; e2e 8/8).
+Trước mỗi thay đổi: `pnpm check && pnpm test && pnpm test:e2e` phải đạt (mốc xanh hiện tại: web 57, protocol 8, backend 23, agent 19 unit test; e2e 9/9; eslint sạch).
 
 ## Nguyên tắc đã thống nhất (người dùng đã duyệt)
 
@@ -43,15 +43,16 @@ Trước mỗi thay đổi: `pnpm check && pnpm test && pnpm test:e2e` phải đ
 
 ## Việc tiếp theo đề xuất (chưa làm)
 
-- Push các commit GĐ4–8 lên `origin/main` khi người dùng đồng ý.
-- Nợ kỹ thuật trong `CLAUDE.md` (mục "Nợ kỹ thuật đã biết"): rate-limit `/api/auth/login`, cookie refresh thiếu `Secure`, message lỗi 500, backend chưa kiểm tra độ dài mật khẩu khi `PUT /api/users/:id`, bundle `index`/`map` > 900 kB (có thể tách chunk theo panel), thêm lint + CI.
+- Đã làm sau refactor (2026-10-21): xóa `services/hnth-relay`; backend: giới hạn đăng nhập, cookie `Secure` theo HTTPS, lỗi 500 không lộ chi tiết, kiểm tra mật khẩu khi `PUT /api/users/:id` và IP của `/api/hnth/test`, migration theo version (`src/migrations/`, `schema_migrations`); web: lazy-load `xlsx`/panel/báo cáo (JS ban đầu ~2,2 MB → ~1,7 MB, chunk `index` 960 → 194 kB); ESLint + GitHub Actions CI.
+- Thay `xlsx@0.18.5` khi người dùng đồng ý (chỉ sửa `core/spreadsheet.ts`).
+- Nếu chạy nhiều tiến trình backend: chuyển bộ giới hạn đăng nhập sang Postgres/Redis.
 - Hai CSS file lớn nhất còn dòng dài (`zones.css`, `hnth.css`): có thể tách dòng cho dễ đọc, giữ nguyên thứ tự quy tắc.
 
 ## Quyết định còn chờ người dùng
 
-1. Xóa hẳn `services/hnth-relay` (relay cũ, backend đã thay thế)?
+1. ~~Xóa `services/hnth-relay`~~ — đã xóa theo yêu cầu người dùng.
 2. Thay `xlsx@0.18.5` (có CVE): người dùng chọn **để sau**; mọi chỗ dùng đã gom vào `core/spreadsheet.ts`, khi thay chỉ sửa file đó.
-3. Migration theo phiên bản cho `db.mjs` (hiện là một script idempotent) — chưa làm, cần chọn cách trước.
+3. ~~Migration theo phiên bản~~ — người dùng chọn runner tự viết; đã làm (`src/migrator.mjs`).
 
 ## Trạng thái môi trường máy dev (lúc bàn giao)
 
