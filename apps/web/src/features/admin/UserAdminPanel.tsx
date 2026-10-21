@@ -92,10 +92,10 @@ export function UserAdminPanel({ onClose }: { onClose: () => void }) {
     setResetPassword("");
   };
 
-  const exportUsers = () => {
+  const exportUsers = async () => {
     const headers = ["STT", "Username", "Password", "Quyền", "Họ và tên", "Đơn vị", "Số điện thoại"];
     const rows = users.map((user, index) => [index + 1, user.username, "", user.role, user.displayName || user.username, user.department || "", user.phone || ""]);
-    downloadWorkbook("tai-khoan.xlsx", [
+    await downloadWorkbook("tai-khoan.xlsx", [
       {
         name: "Tai khoan",
         rows: [headers, ...rows],
@@ -178,7 +178,7 @@ export function UserAdminPanel({ onClose }: { onClose: () => void }) {
       <div className="admin-users-toolbar">
         <button className="primary-button" type="submit" form="user-admin-form">{editing ? "Lưu thay đổi" : "Thêm tài khoản"}</button>
         <button type="button" onClick={() => importInput.current?.click()}>Import</button>
-        <button type="button" onClick={exportUsers}>Export</button>
+        <button type="button" onClick={() => void exportUsers()}>Export</button>
         <input ref={importInput} type="file" accept=".xlsx" hidden onChange={importUsers}/>
       </div>
       {message && <p className="panel-message">{message}</p>}

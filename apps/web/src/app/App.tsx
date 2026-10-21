@@ -1,16 +1,10 @@
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { Bell, FolderOpen, Layers3, MapPinned, Menu, Pentagon, RadioTower, Route, ShieldCheck, Server } from "lucide-react";
 import { useAppStore } from "../core/store";
 import { emitAppEvent } from "../core/events";
-import { LayerPanel } from "../features/layers/LayerPanel";
 import { MapCanvas } from "../features/map/MapCanvas";
-import { RoutingPanel } from "../features/routing/RoutingPanel";
-import { ZonePanel } from "../features/zones/ZonePanel";
-import { SavedObjectsPanel } from "../features/saved-objects/SavedObjectsPanel";
 import { HnthPanel } from "../features/conference/HnthPanel";
 import { HnthStatusMetrics } from "../features/conference/HnthStatusMetrics";
-import { UserAdminPanel } from "../features/admin/UserAdminPanel";
-import { AgentsPanel } from "../features/agents/AgentsPanel";
 import { AuthModal } from "../features/auth/AuthModal";
 import { LoginGate } from "../features/auth/LoginGate";
 import { UserMenu } from "../features/auth/UserMenu";
@@ -19,6 +13,15 @@ import { GlobalSearch } from "./GlobalSearch";
 import { PanelErrorBoundary } from "./PanelErrorBoundary";
 import { SystemStatusBar } from "./SystemStatusBar";
 import { useOperationalLayerLoader } from "./useOperationalLayerLoader";
+
+// Các panel không mở mặc định được tải khi mở lần đầu (HnthPanel luôn mount nên
+// nằm trong bundle chính).
+const LayerPanel = lazy(() => import("../features/layers/LayerPanel").then((module) => ({ default: module.LayerPanel })));
+const ZonePanel = lazy(() => import("../features/zones/ZonePanel").then((module) => ({ default: module.ZonePanel })));
+const SavedObjectsPanel = lazy(() => import("../features/saved-objects/SavedObjectsPanel").then((module) => ({ default: module.SavedObjectsPanel })));
+const RoutingPanel = lazy(() => import("../features/routing/RoutingPanel").then((module) => ({ default: module.RoutingPanel })));
+const AgentsPanel = lazy(() => import("../features/agents/AgentsPanel").then((module) => ({ default: module.AgentsPanel })));
+const UserAdminPanel = lazy(() => import("../features/admin/UserAdminPanel").then((module) => ({ default: module.UserAdminPanel })));
 
 type PanelId = "layers" | "zones" | "saved" | "routing" | "conference" | "agents";
 
@@ -113,19 +116,21 @@ export function App() {
       </aside>
 
       <aside className="side-panel" aria-hidden={isSidebarCollapsed}>
-        {activePanel === "layers" && <LayerPanel />}
-        {activePanel === "zones" && <ZonePanel />}
-        {activePanel === "saved" && <SavedObjectsPanel />}
-        {activePanel === "routing" && <RoutingPanel />}
+        <Suspense fallback={null}>
+          {activePanel === "layers" && <LayerPanel />}
+          {activePanel === "zones" && <ZonePanel />}
+          {activePanel === "saved" && <SavedObjectsPanel />}
+          {activePanel === "routing" && <RoutingPanel />}
+        </Suspense>
         <div style={{ display: activePanel === "conference" || isPresentationMode ? undefined : "none" }}><HnthPanel readOnly={isPresentationMode || !user || user.role === "viewer"} /></div>
-        {activePanel === "agents" && <PanelErrorBoundary><AgentsPanel /></PanelErrorBoundary>}
+        {activePanel === "agents" && <PanelErrorBoundary><Suspense fallback={null}><AgentsPanel /></Suspense></PanelErrorBoundary>}
       </aside>
 
       <section className="map-area">
         <PanelErrorBoundary><MapCanvas /></PanelErrorBoundary>
         <div className="map-title-card"><span>BẢN ĐỒ VẬN HÀNH</span><strong>{mapOperationTitle}</strong><small>20.8449° N, 106.6881° E</small></div>
         <HnthStatusMetrics />
-        {showUserAdmin && <UserAdminPanel onClose={() => setShowUserAdmin(false)} />}
+        {showUserAdmin && <Suspense fallback={null}><UserAdminPanel onClose={() => setShowUserAdmin(false)} /></Suspense>}
         <AuthModal auth={auth} />
       </section>
     </main></LoginGate>;

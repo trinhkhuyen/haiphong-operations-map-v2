@@ -26,12 +26,19 @@ export default defineConfig({
     },
   },
   build: {
+    // Chunk "map" là maplibre-gl (~1 MB, file dist đã minify sẵn, không tree-shake
+    // được); các chunk khác đều dưới 500 kB. Ngưỡng này chỉ để không cảnh báo thừa.
+    chunkSizeWarningLimit: 1100,
     rollupOptions: {
       output: {
-        manualChunks: {
-          map: ["maplibre-gl"],
-          drawing: ["terra-draw", "terra-draw-maplibre-gl-adapter"],
-          vendor: ["react", "react-dom", "zustand"],
+        // Thư viện lớn tách chunk riêng để trình duyệt cache lâu giữa các lần deploy.
+        manualChunks(id) {
+          if (!id.includes("node_modules")) return undefined;
+          if (id.includes("/maplibre-gl/")) return "map";
+          if (id.includes("/terra-draw")) return "drawing";
+          if (/\/(react|react-dom|scheduler|zustand)\//.test(id)) return "vendor";
+          if (/\/(@turf|polyclip-ts|splaytree-ts|robust-predicates|bignumber\.js|rbush|quickselect|sweepline-intersections|concaveman|point-in-polygon-hao)\//.test(id)) return "geo";
+          return undefined;
         },
       },
     },

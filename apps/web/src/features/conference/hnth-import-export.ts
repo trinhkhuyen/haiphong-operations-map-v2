@@ -62,7 +62,7 @@ export async function readHnthImportFile(file: File): Promise<HnthImportRow[]> {
   }));
 }
 
-export function exportHnthPointsXlsx(points: HnthPointFeature[]) {
+export async function exportHnthPointsXlsx(points: HnthPointFeature[]) {
   const header = ["Tên điểm", "IP", "Gateway", "Model/Vendor"];
   const rows = points.map((point) => [
     String(point.properties?.name ?? ""),
@@ -70,7 +70,7 @@ export function exportHnthPointsXlsx(points: HnthPointFeature[]) {
     String(point.properties?.gateway || "192.168.1.1"),
     String(point.properties?.model || point.properties?.modelVendor || ""),
   ]);
-  downloadWorkbook(`hnth-danh-sach-diem-${new Date().toISOString().slice(0, 10)}.xlsx`, [
+  await downloadWorkbook(`hnth-danh-sach-diem-${new Date().toISOString().slice(0, 10)}.xlsx`, [
     { name: "Danh sach HNTH", rows: [header, ...rows], columnWidths: [44, 18, 18, 22], boldHeader: true },
   ]);
 }

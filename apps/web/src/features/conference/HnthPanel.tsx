@@ -11,7 +11,6 @@ import { HnthPointConfigForm } from "./HnthPointConfigForm";
 import { HnthPointList } from "./HnthPointList";
 import { HnthStatusStyleEditor } from "./HnthStatusStyleEditor";
 import { exportHnthPointsXlsx, readHnthImportFile, type HnthImportRow } from "./hnth-import-export";
-import { exportHnthReportPdf } from "./hnth-report";
 import type { DiscoveredIp, HnthAgentRecord, HnthAssignedPoint, HnthLiveAgent, HnthPointFeature } from "./hnth-types";
 import { useHnthLiveSync } from "./useHnthLiveSync";
 
@@ -236,6 +235,8 @@ export function HnthPanel({ readOnly = false }: { readOnly?: boolean }) {
     if (isReporting) return;
     setIsReporting(true);
     try {
+      // Module báo cáo (vẽ canvas + dựng PDF) chỉ tải khi bấm Báo cáo.
+      const { exportHnthReportPdf } = await import("./hnth-report");
       await exportHnthReportPdf(points);
     } finally {
       setIsReporting(false);
@@ -311,7 +312,7 @@ export function HnthPanel({ readOnly = false }: { readOnly?: boolean }) {
     } catch { /* relay/agent offline; cấu hình local vẫn được lưu */ }
   };
 
-  const exportPointConfig = () => exportHnthPointsXlsx(points);
+  const exportPointConfig = () => void exportHnthPointsXlsx(points);
 
   const importPointConfig = async (file: File) => {
     try {
