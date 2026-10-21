@@ -18,7 +18,6 @@ Agent (Windows tray, Electron)  --HTTPS outbound, Bearer token-->  hnth-backend 
 | `apps/web` | Frontend Vite/React/TS (strict) | Thành phần duy nhất có typecheck |
 | `services/hnth-backend` | API + SSE. `src/server.mjs` (entry), `app.mjs` (ráp router), `routes/*.mjs` theo nhóm, `services/` (realtime/SSE, release), `auth.mjs`, `config.mjs`, `db.mjs` (migrate idempotent lúc khởi động) | Node ESM thuần, router tự viết, không framework; unit test ở `test/` |
 | `services/hnth-agent` | Agent LAN: `src/index.mjs` (entry, chạy ngay khi import), `config`, `identity` (installationId/register/clone/heartbeat), `backend-client`, `probes/{ping,snmp,scan}`, `telemetry`, `monitor`, `commands`, `updater`; `desktop/main.cjs` (Electron tray, import `src/index.mjs`) | Build `.exe` bằng electron-builder; unit test ở `test/` (ngoài `src` để không bị đóng vào exe) |
-| `services/hnth-relay` | Relay in-memory cũ (cổng 8787) | **Lỗi thời** — backend 8788 đã thay thế. Không phát triển thêm |
 | `packages/hnth-protocol` | Hợp đồng dùng chung (ESM thuần + `index.d.ts`): từ vựng trạng thái, `toConnectionStatus`, `classifyProbeResult`, `OPERATOR_COMMAND_TYPES`, `readExeVersion`, `compareVersions` | Web, backend, agent đều import. Bản exe Agent kèm package này qua `extraResources` trong `electron-builder.yml` — thêm file mới vào package thì kiểm tra filter ở đó |
 
 README.md mô tả `packages/contracts`, `services/api`, `infra` — **không tồn tại**, đó là kế hoạch cũ. Tin code, không tin README.
@@ -76,7 +75,7 @@ docker compose --env-file .env.source -f docker-compose.source.yml up -d --build
 
 **State**: `core/store.ts` (Zustand + `persist` vào localStorage) ráp các slice trong `core/store/` (`ui`, `layers`, `map`, `administrative`, `drawing`, `annotations`, `hnth`). Thêm trường vào slice phù hợp; action được đọc/ghi trường slice khác qua `set`/`get`. Thêm field bền vững → sửa `core/store/persist.ts` (`partialize`/`merge`/migrate) để không làm hỏng state người dùng đã lưu.
 
-**Gọi API từ web**: dùng client trong `core/api/clients.ts` (`hnthApi`, `agentsApi`), hoặc `hnthFetch(apiUrl(path))` (`core/api/http.ts`, `core/api/base.ts`) — tự gắn Bearer, `no-store`, tự refresh khi 401. `API_BASE` là nơi duy nhất đọc `VITE_HNTH_BACKEND_URL`/`VITE_HNTH_RELAY_URL`; rỗng = same-origin `/api` (bắt buộc cho điện thoại trong LAN; đừng hardcode `localhost`). Riêng `core/auth.ts` gọi `fetch` thẳng (login/refresh không được tự refresh).
+**Gọi API từ web**: dùng client trong `core/api/clients.ts` (`hnthApi`, `agentsApi`), hoặc `hnthFetch(apiUrl(path))` (`core/api/http.ts`, `core/api/base.ts`) — tự gắn Bearer, `no-store`, tự refresh khi 401. `API_BASE` là nơi duy nhất đọc `VITE_HNTH_BACKEND_URL`; rỗng = same-origin `/api` (bắt buộc cho điện thoại trong LAN; đừng hardcode `localhost`). Riêng `core/auth.ts` gọi `fetch` thẳng (login/refresh không được tự refresh).
 
 **Backend**:
 - Thêm route: `router.add(method, "/api/x/:id", handler, { public })` trong `routes/<nhóm>.mjs`. Mặc định route **cần đăng nhập** (app.mjs xác thực JWT trước, gán `user`); `public: true` chỉ cho live-view của Guest và API của Agent (tự kiểm tra token agent bằng `auth.agentAuthorizedForId`). Đường dẫn không khớp: chưa đăng nhập → 401, đã đăng nhập → 404.
