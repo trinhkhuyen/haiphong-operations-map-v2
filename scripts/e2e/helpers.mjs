@@ -9,7 +9,7 @@ import { fileURLToPath } from "node:url";
 
 export const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 export const BACKEND_DIR = path.join(ROOT, "services", "hnth-backend");
-export const AGENT_SCRIPT = path.join(ROOT, "services", "hnth-agent", "src", "agent.mjs");
+export const AGENT_SCRIPT = path.join(ROOT, "services", "hnth-agent", "src", "index.mjs");
 export const pg = createRequire(path.join(BACKEND_DIR, "package.json"))("pg");
 
 export const DATABASE_URL = process.env.E2E_DATABASE_URL || "postgres://hnth:hnth_local_password@127.0.0.1:5432/hnth";

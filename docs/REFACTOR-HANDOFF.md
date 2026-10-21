@@ -6,9 +6,9 @@ Tài liệu cho phiên làm việc tiếp theo. Đọc cùng `CLAUDE.md` (quy ư
 
 Gửi cho Claude:
 
-> Đọc `CLAUDE.md` và `docs/REFACTOR-HANDOFF.md`, rồi lập kế hoạch và làm Giai đoạn 3 (tách module agent).
+> Đọc `CLAUDE.md` và `docs/REFACTOR-HANDOFF.md`, rồi lập kế hoạch và làm Giai đoạn 4 (tầng API và realtime của web).
 
-Trước mỗi giai đoạn: `pnpm check && pnpm test && pnpm test:e2e` phải đạt (mốc xanh hiện tại: web 39, protocol 8, backend 14 unit test; e2e 8/8).
+Trước mỗi giai đoạn: `pnpm check && pnpm test && pnpm test:e2e` phải đạt (mốc xanh hiện tại: web 39, protocol 8, backend 14, agent 19 unit test; e2e 8/8).
 
 ## Nguyên tắc đã thống nhất (người dùng đã duyệt)
 
@@ -25,14 +25,14 @@ Trước mỗi giai đoạn: `pnpm check && pnpm test && pnpm test:e2e` phải �
 | 0 | `2b21e2e` | Lưới an toàn: vitest cho web (hàm thuần, store + hình dạng persist, CSV, version exe); `scripts/e2e/` chạy backend + agent thật trên schema Postgres riêng |
 | 1 | `0e7bc94` | `packages/hnth-protocol` (ESM + `.d.ts`): `toConnectionStatus`, `classifyProbeResult`, `OPERATOR_COMMAND_TYPES`, `readExeVersion`, `compareVersions`. Web, backend, agent đều import; exe Agent kèm package qua `extraResources` |
 | 2 | `71dcfa8` | Backend tách `config/http/router/auth/app`, `services/{realtime,releases}`, `routes/{auth,users,agent-api,agents,telemetry,hnth}`. Bỏ 6 route chết; production bắt buộc `JWT_SECRET`/`HNTH_AGENT_TOKEN`; CORS trả đúng origin cho mọi route |
+| 3 | `refactor(agent)` | Agent: `agent.mjs` → `src/index.mjs` (entry) + `config`, `identity`, `backend-client`, `probes/{ping,snmp,scan}`, `telemetry`, `monitor`, `commands`, `updater`, `util`. 19 unit test ở `services/hnth-agent/test/`. Thay đổi có chủ ý duy nhất: `pingHost` chỉ gọi `ping.exe` với literal IP; chuỗi khác (kể cả tên máy, trước đây ping được qua `test-point`) bị coi là mất gói → `offline`. Điểm cấu hình qua backend vốn đã là `inet` nên không ảnh hưởng. Đã kiểm chứng exe đóng gói thật (đăng ký, ping, test-point, cập nhật từ xa 0.2.4→0.2.5) với backend tạm |
+
+### Cách kiểm chứng exe Agent (dùng lại khi đổi agent)
+- Build ra scratchpad bằng bản sao `electron-builder.yml` chỉ đổi `directories.output` và nguồn `config.json` (dùng config giả, tránh nhúng token thật): `electron-builder --win portable --config <copy> -c.extraMetadata.version=<x>`.
+- Đặt `config.json` (backendUrl = backend tạm) **cạnh exe**, không dùng env `HNTH_AGENT_CONFIG`: updater khởi động lại exe qua WMI nên không kế thừa env.
+- Dọn: chỉ dừng tiến trình có `ExecutablePath` trong thư mục thử cùng cây con của chúng — **người dùng chạy Agent thật cùng tên `Agent HNTH`**.
 
 ## Còn lại
-
-### GĐ3 — Agent tách module (`services/hnth-agent/src/agent.mjs`, 450 dòng)
-- Hiện file chạy ngay khi import (đọc config ở top-level), nên chưa test được. Tách: `config`, `identity` (installationId, enroll/clone), `backend-client`, `probes/{ping,snmp,scan}`, `monitor` (vòng giám sát, xoay vòng, gửi thay đổi), `commands`, `updater`, `index.mjs` (khởi động).
-- Unit test hàm thuần: `expandSubnet`, `vendorFromMac`, mã hóa/giải mã BER của SNMP, chọn điểm ưu tiên trong vòng giám sát.
-- Sửa nợ: lệnh `test-point` đưa `ipAddress` chưa kiểm tra vào `ping.exe` — validate IPv4.
-- **Bắt buộc kiểm chứng exe thật**: `desktop/main.cjs` import `src/agent.mjs` (đổi entry thì sửa cả đây); `electron-builder.yml` copy `src` → `resources/agent/src` và package protocol → `resources/agent/node_modules`. Build exe ra scratchpad, chạy với backend tạm (mẫu: dùng `scripts/e2e/helpers.mjs`), xác nhận đăng ký + ping + cập nhật. Khi dừng tiến trình thử chỉ dừng cây tiến trình xuất phát từ thư mục thử — **người dùng đang chạy Agent thật cùng tên tiến trình `Agent HNTH`**.
 
 ### GĐ4 — Web: tầng API và realtime
 - `core/api/`: một base URL dùng chung (hiện tính lặp 8 chỗ từ `VITE_HNTH_BACKEND_URL`/`VITE_HNTH_RELAY_URL`), client có kiểu (`hnthApi`, `agentsApi`, `authApi`); bỏ 7 chỗ `fetch` thô.

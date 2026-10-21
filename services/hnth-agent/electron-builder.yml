@@ -10,7 +10,7 @@ files:
 extraResources:
   - from: src
     to: agent/src
-  # agent.mjs import "@haiphong-ops/hnth-protocol"; Node tìm package này trong
+  # src/probes/ping.mjs import "@haiphong-ops/hnth-protocol"; Node tìm package này trong
   # resources/agent/node_modules khi chạy bản đóng gói (không có workspace link).
   - from: ../../packages/hnth-protocol
     to: agent/node_modules/@haiphong-ops/hnth-protocol

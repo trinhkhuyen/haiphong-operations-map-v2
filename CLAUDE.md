@@ -17,7 +17,7 @@ Agent (Windows tray, Electron)  --HTTPS outbound, Bearer token-->  hnth-backend 
 |---|---|---|
 | `apps/web` | Frontend Vite/React/TS (strict) | Thành phần duy nhất có typecheck |
 | `services/hnth-backend` | API + SSE. `src/server.mjs` (entry), `app.mjs` (ráp router), `routes/*.mjs` theo nhóm, `services/` (realtime/SSE, release), `auth.mjs`, `config.mjs`, `db.mjs` (migrate idempotent lúc khởi động) | Node ESM thuần, router tự viết, không framework; unit test ở `test/` |
-| `services/hnth-agent` | Agent LAN: `src/agent.mjs` (logic), `desktop/main.cjs` (Electron tray + tự cập nhật) | Build `.exe` bằng electron-builder |
+| `services/hnth-agent` | Agent LAN: `src/index.mjs` (entry, chạy ngay khi import), `config`, `identity` (installationId/register/clone/heartbeat), `backend-client`, `probes/{ping,snmp,scan}`, `telemetry`, `monitor`, `commands`, `updater`; `desktop/main.cjs` (Electron tray, import `src/index.mjs`) | Build `.exe` bằng electron-builder; unit test ở `test/` (ngoài `src` để không bị đóng vào exe) |
 | `services/hnth-relay` | Relay in-memory cũ (cổng 8787) | **Lỗi thời** — backend 8788 đã thay thế. Không phát triển thêm |
 | `packages/hnth-protocol` | Hợp đồng dùng chung (ESM thuần + `index.d.ts`): từ vựng trạng thái, `toConnectionStatus`, `classifyProbeResult`, `OPERATOR_COMMAND_TYPES`, `readExeVersion`, `compareVersions` | Web, backend, agent đều import. Bản exe Agent kèm package này qua `extraResources` trong `electron-builder.yml` — thêm file mới vào package thì kiểm tra filter ở đó |
 
@@ -31,7 +31,7 @@ README.md mô tả `packages/contracts`, `services/api`, `infra` — **không t�
 pnpm install                 # nếu báo ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY: CI=true pnpm install --frozen-lockfile
 pnpm check                   # tsc -b apps/web + node --check mọi .mjs/.cjs trong services/ và scripts/ (~15s)
 pnpm check:full              # như trên + unit test + vite build production (~50s)
-pnpm test                    # unit test web (vitest) + hnth-protocol (node:test), ~3s
+pnpm test                    # unit test web (vitest) + hnth-protocol, backend, agent (node:test), ~5s
 pnpm test:e2e                # e2e backend + agent thật trên schema Postgres riêng, cổng ngẫu nhiên (~20s); không có Postgres thì skip
 pnpm dev                     # chỉ frontend, http://127.0.0.1:5173 (proxy /api -> 127.0.0.1:8788)
 pnpm smoke:backend           # smoke test chỉ-đọc vào backend đang chạy (BACKEND_URL, SMOKE_USER/SMOKE_PASSWORD tùy chọn)
@@ -101,6 +101,6 @@ docker compose --env-file .env.source -f docker-compose.source.yml up -d --build
 
 1. **Repo cũ**: từ 2026-10-21 làm việc trên `origin` = `trinhkhuyen/haiphong-operations-map-v2` (lịch sử sạch, bắt đầu từ `d8337c4`). Repo cũ `haiphong-operations-map` đã archive (chỉ đọc) trên GitHub và vẫn chứa `.codex_tmp/` trong lịch sử. Bản sao cục bộ cũ (`Documents\Map`, nhánh `legacy-main`, `.codex_tmp/`, `artifacts/`, exe 0.1.x) đã bị xóa.
 2. Backend: không rate-limit `/api/auth/login`; cookie refresh thiếu `Secure`; message lỗi 500 trả nguyên `error.message`; schema vẫn là một script idempotent trong `db.mjs` (chưa có migration theo phiên bản).
-3. Agent: lệnh `test-point` chuyển `ipAddress` chưa kiểm tra thẳng vào `ping.exe` (không qua shell, nhưng có thể chèn tham số như `-t`).
+3. Agent: ~~`test-point` đưa `ipAddress` chưa kiểm tra vào `ping.exe`~~ — đã xử lý ở GĐ3 (`pingHost` chỉ nhận literal IPv4/IPv6). Backend `/api/hnth/test` vẫn chưa validate `ipAddress`.
 4. Web: `UserAdminPanel` reset mật khẩu về chuỗi cứng; `xlsx@0.18.5` (bản npm đã ngừng, có CVE); `MapCanvas.tsx` ~2.900 dòng; bundle `index`/`map` >900 kB.
 5. Chưa có lint và CI (đã có unit test + e2e).

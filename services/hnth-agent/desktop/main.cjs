@@ -7,14 +7,14 @@ const agentRoot = isPackaged
   ? path.join(process.resourcesPath, "agent")
   : path.resolve(__dirname, "..");
 let configPath = process.env.HNTH_AGENT_CONFIG || path.join(agentRoot, "config.json");
-const agentPath = path.join(agentRoot, "src", "agent.mjs");
+const agentPath = path.join(agentRoot, "src", "index.mjs");
 let tray;
 let agentStatus = "Đang khởi động…";
 
 // Bản portable chạy từ thư mục giải nén tạm (resources bị xóa khi thoát), nên config
 // phải nằm ngoài: ưu tiên cạnh file .exe, nếu thư mục đó không ghi được thì dùng
 // %APPDATA%\HNTH Agent. Lần chạy đầu tiên config được tạo từ bản mẫu đóng gói sẵn.
-// Định danh Agent gắn với thư mục chứa config này (xem register() trong agent.mjs).
+// Định danh Agent gắn với thư mục chứa config này (xem src/identity.mjs).
 function resolvePackagedConfigPath() {
   const template = path.join(agentRoot, "config.json");
   const portableDir = process.env.PORTABLE_EXECUTABLE_DIR || path.dirname(process.execPath);
@@ -37,7 +37,7 @@ function createTrayIcon() {
 }
 
 // agentId đọc lại từ config mỗi lần làm mới menu: Agent có thể đổi id khi
-// phát hiện bản copy và tự enroll (xem register() trong agent.mjs).
+// phát hiện bản copy và tự enroll (xem src/identity.mjs).
 function currentAgentId() {
   try { return JSON.parse(fs.readFileSync(configPath, "utf8")).agentId || "chưa có"; } catch { return "chưa có"; }
 }

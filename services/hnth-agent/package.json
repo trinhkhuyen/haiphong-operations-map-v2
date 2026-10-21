@@ -7,7 +7,8 @@
   "main": "desktop/main.cjs",
   "type": "module",
   "scripts": {
-    "start": "node src/agent.mjs",
+    "start": "node src/index.mjs",
+    "test": "node --test \"test/*.test.mjs\"",
     "desktop": "electron desktop/main.cjs",
     "build:windows": "electron-builder --win portable"
   },
