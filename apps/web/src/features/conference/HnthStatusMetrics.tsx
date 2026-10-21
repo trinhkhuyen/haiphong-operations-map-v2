@@ -1,18 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Cable, ChevronDown, ChevronUp, CircleAlert, CircleHelp, Clock3, FileText, GripHorizontal, RadioTower, X, Zap } from "lucide-react";
-import type { Feature, Point } from "geojson";
+import { Cable, CircleAlert, CircleHelp, Clock3, FileText, GripHorizontal, RadioTower, X, Zap } from "lucide-react";
 import { toConnectionStatus } from "@haiphong-ops/hnth-protocol";
 import { useAppStore } from "../../core/store";
 import { hnthApi } from "../../core/api/clients";
 import { emitAppEvent, onAppEvent } from "../../core/events";
-import { subscribeMonitorBatches } from "../../core/realtime/hnth-realtime";
-import { useHnthLiveStore, type MonitoringInfo } from "../../core/realtime/hnth-live-store";
 import { HNTH_LAYER_ID, HNTH_STATUS_LABELS, normalizeHnthStatus, type HnthConnectionStatus } from "../layers/hnth-data-provider";
 import { HnthDisconnectConfirmButton } from "./HnthDisconnectConfirmButton";
-
-type HnthPointFeature = Feature<Point, Record<string, unknown>>;
-type MonitorLogEntry = { pointId: string; name: string; ip: string; status: string; time: string; timestamp: number };
-type MonitorLogApiEntry = { pointId?: string; ipAddress?: string | null; status?: string; latencyMs?: number | null; checkedAt?: string; receivedAt?: string };
+import { HnthMonitorLogPopup } from "./HnthMonitorLogPopup";
+import { HnthPointLogPopup, useHnthPointLog } from "./HnthPointLogPopup";
+import type { HnthPointFeature } from "./hnth-types";
 
 const cards: Array<{ status: HnthConnectionStatus; label: string; icon: typeof Cable }> = [
   { status: "unknown", label: "CHƯA XÁC ĐỊNH", icon: CircleHelp },
@@ -36,16 +32,6 @@ export function HnthStatusMetrics() {
   const [testLines, setTestLines] = useState<string[]>([]);
   const [testSequencePosition, setTestSequencePosition] = useState<number | null>(null);
   const [testPopupPosition, setTestPopupPosition] = useState<{ left: number; top: number } | null>(null);
-  const [continuousMonitoring, setContinuousMonitoring] = useState(false);
-  const [monitorConcurrency, setMonitorConcurrency] = useState(2);
-  const [monitorLog, setMonitorLog] = useState<MonitorLogEntry[]>([]);
-  const [pointLog, setPointLog] = useState<{ pointId: string; name: string } | null>(null);
-  const [pointLogEntries, setPointLogEntries] = useState<MonitorLogEntry[]>([]);
-  const [pointLogLoading, setPointLogLoading] = useState(false);
-  const [monitorAutoFocus, setMonitorAutoFocus] = useState(true);
-  const [monitorLogCollapsed, setMonitorLogCollapsed] = useState(() => window.matchMedia("(max-width: 760px)").matches);
-  const monitorLogListRef = useRef<HTMLDivElement | null>(null);
-  const monitoringSessionRef = useRef(false);
   const hasAppliedDefaultDetailStatus = useRef(false);
   const testPopupRef = useRef<HTMLElement | null>(null);
   const testDragRef = useRef<{
@@ -64,6 +50,7 @@ export function HnthStatusMetrics() {
   // Điểm trung tâm cũng là endpoint được giám sát nên phải được tính vào
   // các nhóm trạng thái và tổng số trên thanh trạng thái.
   const points = allPoints;
+  const { pointLog, pointLogEntries, pointLogLoading, openPointLog, closePointLog } = useHnthPointLog(allPoints);
   const grouped = useMemo(() => Object.fromEntries(cards.map(({ status }) => [
     status,
     points
@@ -117,81 +104,6 @@ export function HnthStatusMetrics() {
     });
   }, []);
 
-  useEffect(() => {
-    const onMonitoring = (detail: MonitoringInfo) => {
-      const enabled = Boolean(detail?.enabled);
-      setContinuousMonitoring(enabled);
-      if (detail?.concurrency) setMonitorConcurrency(detail.concurrency);
-      // Khi bắt đầu một phiên mới, không được nạp lại log/trạng thái của
-      // phiên trước. Phiên tắt chỉ giữ nguyên kết quả gần nhất trên bản đồ.
-      const startedNewSession = enabled && !monitoringSessionRef.current;
-      monitoringSessionRef.current = enabled;
-      if (startedNewSession) {
-        setMonitorLog([]);
-        allPoints.forEach((point) => {
-          const pointId = String(point.properties?.pointId ?? point.id ?? "");
-          if (pointId) updateHnthPoint(pointId, { status: "unknown" });
-        });
-      }
-    };
-    // Nghe đồng bộ (không qua render) để reset log của phiên mới chạy trước khi
-    // batch đầu tiên của phiên đó được ghi vào log.
-    return useHnthLiveStore.subscribe((state, previous) => {
-      if (state.monitoring !== previous.monitoring) onMonitoring(state.monitoring);
-    });
-  }, [allPoints, updateHnthPoint]);
-
-  useEffect(() => {
-    if (!continuousMonitoring) return;
-    const toEntry = (item: MonitorLogApiEntry): MonitorLogEntry => {
-      const pointId = String(item.pointId ?? "");
-      const point = allPoints.find((candidate) => String(candidate.properties?.pointId ?? candidate.id) === pointId)
-        ?? allPoints.find((candidate) => String(candidate.properties?.ipAddress ?? "").trim() === String(item.ipAddress ?? "").trim());
-      const timestamp = Date.parse(String(item.checkedAt ?? item.receivedAt ?? "")) || Date.now();
-      const rawStatus = String(point?.properties?.ipAddress ?? "").trim() ? String(item.status ?? "unknown") : "unknown";
-      return {
-        pointId: String(point?.properties?.pointId ?? point?.id ?? pointId),
-        name: String(point?.properties?.name ?? item.pointId ?? "Endpoint"),
-        ip: String(item.ipAddress ?? point?.properties?.ipAddress ?? ""),
-        status: rawStatus === "online" ? "Online" : rawStatus === "offline" ? "Offline" : "Chưa xác định",
-        time: new Date(timestamp).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit", second: "2-digit" }),
-        timestamp,
-      };
-    };
-    return subscribeMonitorBatches((monitorBatch) => {
-      const batch = monitorBatch as { sentAt?: string; results?: MonitorLogApiEntry[]; allResults?: MonitorLogApiEntry[] };
-      // allResults là toàn bộ endpoint của batch hiện tại. results chỉ là
-      // payload thay đổi trạng thái để cập nhật trạng thái nhẹ hơn, không
-      // được dùng làm log vì sẽ làm mất các dòng endpoint không đổi.
-      const items = Array.isArray(batch?.allResults)
-        ? batch.allResults
-        : Array.isArray(batch?.results) ? batch.results : [];
-      if (!items.length) return;
-      // HnthPanel là nơi duy nhất cập nhật trạng thái trong store. Component
-      // này chỉ ghi log, tránh hai SSE cùng ghi một điểm và làm MapLibre nháy.
-      const entries = items.map((item) => toEntry({ ...item, checkedAt: item.checkedAt ?? batch.sentAt }));
-      setMonitorLog((current) => [...current, ...entries].slice(-1000));
-    });
-  }, [allPoints, continuousMonitoring, monitorConcurrency, updateHnthPoint]);
-
-  useEffect(() => {
-    if (!monitorAutoFocus) return;
-    const list = monitorLogListRef.current;
-    if (!list) return;
-    list.scrollTop = list.scrollHeight;
-  }, [monitorAutoFocus, monitorLog]);
-
-  const exportMonitorLog = () => {
-    const text = monitorLog.map((item) => `${item.time}\t${item.name}\t${item.ip}\t${item.status}`).join("\n");
-    const blob = new Blob([`Thời gian\tEndpoint\tIP\tTrạng thái\n${text}`], { type: "text/plain;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = `hnth-monitor-log-${new Date().toISOString().slice(0, 10)}.txt`;
-    anchor.click();
-    URL.revokeObjectURL(url);
-  };
-
   const focusPoint = (item: HnthPointFeature) => {
     const pointId = String(item.properties?.pointId ?? item.id);
     const wardCode = String(item.properties?.wardCode ?? "");
@@ -200,44 +112,6 @@ export function HnthStatusMetrics() {
     emitAppEvent("hnth:focus", { coordinates: item.geometry.coordinates as [number, number], preserveZoom: true, administrativeId, boundaryWidthMultiplier: 2 });
     emitAppEvent("map:context-info", { kind: "hnth", pointId, administrativeId, pulseBoundary: true });
   };
-
-  const openPointLog = async (item: HnthPointFeature) => {
-    const pointId = String(item.properties?.pointId ?? item.id);
-    const name = String(item.properties?.name ?? "Endpoint");
-    setPointLog({ pointId, name });
-    setPointLogEntries([]);
-    setPointLogLoading(true);
-    try {
-      const response = await hnthApi.monitorLog(pointId);
-      if (!response.ok) return;
-      const payload = await response.json() as { entries?: MonitorLogApiEntry[] };
-      const entries = (payload.entries ?? []).map((entry) => {
-        const parsed = String(entry.checkedAt ?? entry.receivedAt ?? "");
-        const timestamp = Date.parse(parsed) || Date.now();
-        const rawStatus = String(entry.status ?? "unknown");
-        return {
-          pointId,
-          name,
-          ip: String(entry.ipAddress ?? item.properties?.ipAddress ?? ""),
-          status: rawStatus === "online" ? "Online" : rawStatus === "offline" ? "Offline" : "Chưa xác định",
-          time: new Date(timestamp).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit", second: "2-digit" }),
-          timestamp,
-        };
-      }).sort((left, right) => left.timestamp - right.timestamp);
-      setPointLogEntries(entries);
-    } finally {
-      setPointLogLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    return onAppEvent("hnth:open-point-log", (detail) => {
-      const pointId = String(detail?.pointId ?? "");
-      if (!pointId) return;
-      const item = allPoints.find((candidate) => String(candidate.properties?.pointId ?? candidate.id) === pointId);
-      if (item) void openPointLog(item);
-    });
-  }, [allPoints]);
 
   useEffect(() => {
     if (!autoPingEnabled) return;
@@ -393,25 +267,8 @@ export function HnthStatusMetrics() {
     }
 
     {/* Popup Log nằm phía dưới; có thể thu nhỏ/mở rộng và kéo mép dưới để đổi chiều cao. */}
-    {continuousMonitoring && <section className={`hnth-monitor-log-popup${monitorLogCollapsed ? " is-collapsed" : ""}`} role="region" aria-label="Log giám sát liên tục">
-      <header><span><RadioTower size={16}/><strong>Log giám sát liên tục</strong><em>{monitorConcurrency} luồng</em></span><span className="hnth-monitor-log-actions"><label><input data-hnth-monitor-autofocus="true" type="checkbox" checked={monitorAutoFocus} onChange={(event) => setMonitorAutoFocus(event.target.checked)}/> AutoFocus</label><button type="button" className="hnth-monitor-log-toggle" onClick={() => setMonitorLogCollapsed((value) => !value)} title={monitorLogCollapsed ? "Mở rộng log" : "Thu nhỏ log"} aria-label={monitorLogCollapsed ? "Mở rộng log" : "Thu nhỏ log"}>{monitorLogCollapsed ? <ChevronUp size={13}/> : <ChevronDown size={13}/>}</button><button type="button" onClick={exportMonitorLog}>Export</button></span></header>
-      {!monitorLogCollapsed && <div data-hnth-monitor-log-list="true" ref={monitorLogListRef} className="hnth-monitor-log-list">
-        {monitorLog.length === 0 && <small>Đang chờ kết quả từ agent...</small>}
-        {monitorLog.map((item, index) => {
-          const point = allPoints.find((candidate) => String(candidate.properties?.pointId ?? candidate.id) === item.pointId);
-          return <button className={`hnth-monitor-log-row ${item.status.toLowerCase()}`} key={`${item.pointId}-${item.timestamp}-${index}`} type="button" onClick={() => { if (point) focusPoint(point); }}><i/><span><strong>{item.name}</strong><small>{item.ip} · {item.status} {item.time}</small></span></button>;
-        })}
-      </div>}
-    </section>}
-    {pointLog && <section className="hnth-point-log-popup" role="dialog" aria-modal="true" aria-label={`Log ${pointLog.name}`}>
-      <header><span><FileText size={16}/><strong>Log endpoint</strong></span><button type="button" onClick={() => setPointLog(null)} aria-label="Đóng log endpoint"><X size={17}/></button></header>
-      <div className="hnth-point-log-title"><strong>{pointLog.name}</strong><small>{pointLog.pointId}</small></div>
-      <div className="hnth-point-log-list">
-        {pointLogLoading && <small>Đang tải log...</small>}
-        {!pointLogLoading && pointLogEntries.length === 0 && <small>Chưa có log thay đổi trạng thái.</small>}
-        {pointLogEntries.map((item, index) => <div className={`hnth-monitor-log-row ${item.status.toLowerCase()}`} key={`${item.timestamp}-${index}`}><i/><span><strong>{item.status}</strong><small>{item.ip || "Chưa có IP"} · {item.time}</small></span></div>)}
-      </div>
-    </section>}
+    <HnthMonitorLogPopup allPoints={allPoints} onFocusPoint={focusPoint} />
+    <HnthPointLogPopup pointLog={pointLog} pointLogEntries={pointLogEntries} pointLogLoading={pointLogLoading} onClose={closePointLog} />
     {/* Popup Chi tiết Test: nằm phía trên popup Log, mặc định ở góc trái và có thể kéo bằng thanh thông tin điểm. */}
     {testPoint && <section
       ref={testPopupRef}

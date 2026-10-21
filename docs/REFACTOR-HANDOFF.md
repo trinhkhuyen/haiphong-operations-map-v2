@@ -1,12 +1,12 @@
 # Bàn giao refactor module hóa — trạng thái ngày 2026-10-21
 
-Tài liệu cho phiên làm việc tiếp theo. Đọc cùng `CLAUDE.md` (quy ước, lệnh, bẫy). Mọi thứ dưới đây đã có trên `origin/main` của `trinhkhuyen/haiphong-operations-map-v2`.
+Tài liệu cho phiên làm việc tiếp theo. Đọc cùng `CLAUDE.md` (quy ước, lệnh, bẫy). GĐ0–3 đã có trên `origin/main` của `trinhkhuyen/haiphong-operations-map-v2`; từ GĐ4 trở đi là commit cục bộ cho tới khi người dùng bảo push (`git status -sb` để xem).
 
 ## Cách bắt đầu phiên mới
 
 Gửi cho Claude:
 
-> Đọc `CLAUDE.md` và `docs/REFACTOR-HANDOFF.md`, rồi lập kế hoạch và làm Giai đoạn 7 (tách các panel).
+> Đọc `CLAUDE.md` và `docs/REFACTOR-HANDOFF.md`, rồi lập kế hoạch và làm Giai đoạn 6 (tách MapCanvas).
 
 Trước mỗi giai đoạn: `pnpm check && pnpm test && pnpm test:e2e` phải đạt (mốc xanh hiện tại: web 48, protocol 8, backend 14, agent 19 unit test; e2e 8/8).
 
@@ -26,9 +26,12 @@ Trước mỗi giai đoạn: `pnpm check && pnpm test && pnpm test:e2e` phải �
 | 1 | `0e7bc94` | `packages/hnth-protocol` (ESM + `.d.ts`): `toConnectionStatus`, `classifyProbeResult`, `OPERATOR_COMMAND_TYPES`, `readExeVersion`, `compareVersions`. Web, backend, agent đều import; exe Agent kèm package qua `extraResources` |
 | 2 | `71dcfa8` | Backend tách `config/http/router/auth/app`, `services/{realtime,releases}`, `routes/{auth,users,agent-api,agents,telemetry,hnth}`. Bỏ 6 route chết; production bắt buộc `JWT_SECRET`/`HNTH_AGENT_TOKEN`; CORS trả đúng origin cho mọi route |
 | 3 | `65d8866` | Agent: `agent.mjs` → `src/index.mjs` (entry) + `config`, `identity`, `backend-client`, `probes/{ping,snmp,scan}`, `telemetry`, `monitor`, `commands`, `updater`, `util`. 19 unit test ở `services/hnth-agent/test/`. Thay đổi có chủ ý duy nhất: `pingHost` chỉ gọi `ping.exe` với literal IP; chuỗi khác (kể cả tên máy, trước đây ping được qua `test-point`) bị coi là mất gói → `offline`. Điểm cấu hình qua backend vốn đã là `inet` nên không ảnh hưởng. Đã kiểm chứng exe đóng gói thật (đăng ký, ping, test-point, cập nhật từ xa 0.2.4→0.2.5) với backend tạm |
-
 | 4 | `8656c94` | Web: `core/api/` (`API_BASE` duy nhất, `hnthFetch`, client `hnthApi`/`agentsApi`), `core/realtime/` (một SSE + một vòng poll `monitor-state` cho cả trang, `useHnthLiveStore` cho backend/agent/cờ giám sát, `subscribeMonitorBatches`), `core/events.ts` (event bus có kiểu, giữ tên event cũ). Bỏ event `hnth:agent-status`, `hnth:continuous-monitoring`, `hnth:monitor-batch` và các hằng `*_EVENT`. 8 unit test mới. Thay đổi có chủ ý: (1) status bar dùng chung snapshot nên làm mới mỗi 2–5 s thay vì 10 s, và số request `monitor-state` giảm từ 3 nguồn còn 1; (2) `auth.ts`, `HnthStatusMetrics`, `UserAdminPanel`, `AgentsPanel` nay cũng dùng `API_BASE` (trước đây bỏ qua `VITE_HNTH_RELAY_URL`, riêng `AgentsPanel` bỏ qua cả `VITE_HNTH_BACKEND_URL`) — chỉ khác khi đặt biến này khác rỗng |
-| 5 | `refactor(web): store slices` | `core/store.ts` chỉ ráp slice + persist; slice trong `core/store/`: `ui`, `layers`, `map`, `administrative`, `drawing`, `annotations` (kèm thao tác Đối tượng đã lưu), `hnth`; `persist.ts` giữ nguyên key, version 4, `migrate`, `partialize` (21 trường), `merge`. Thuộc tính được chép nguyên văn theo tên khóa bằng script. Test mới: không slice nào trùng khóa, đủ 113 trường. Không đổi hành vi |
+| 5 | `227756f` | `core/store.ts` chỉ ráp slice + persist; slice trong `core/store/`: `ui`, `layers`, `map`, `administrative`, `drawing`, `annotations` (kèm thao tác Đối tượng đã lưu), `hnth`; `persist.ts` giữ nguyên key, version 4, `migrate`, `partialize` (21 trường), `merge`. Thuộc tính được chép nguyên văn theo tên khóa bằng script. Test mới: không slice nào trùng khóa, đủ 113 trường. Không đổi hành vi |
+| 7 | `1953faa`, `refactor(web): panels` | `HnthPanel` 1.094 → 429 dòng: `useHnthLiveSync` (effect đồng bộ realtime, chép nguyên văn cùng deps), `HnthPointConfigForm`, `HnthAgentSelector`, `HnthPointList`, `HnthStatusStyleEditor`, `HnthDeviceInfoModal`, `hnth-import-export.ts`, `hnth-report.ts`, `hnth-types.ts`. `HnthStatusMetrics`: `HnthMonitorLogPopup`, `HnthPointLogPopup` + `useHnthPointLog`. `App.tsx` 318 → 132: `features/auth/` (`useAuth`, `UserMenu`, `AuthModal`, `LoginGate`), `SystemStatusBar`, `GlobalSearch`, `PanelErrorBoundary`, `useOperationalLayerLoader`. `UserAdminPanel` viết lại cho đọc được, dùng `usersApi`. `xlsx` chỉ còn import ở `core/spreadsheet.ts`. Bỏ code chết (`csvEscape`, `pdfText`, khối thống kê camera `{false && …}`). Thay đổi có chủ ý (người dùng chọn): Reset MK không còn đặt về `rgb@2026` mà mở hộp thoại cho Admin nhập mật khẩu mới ≥ 8 ký tự. Đã kiểm chứng trên app thật (Khách) và trên backend tạm có đăng nhập Admin (tạo tài khoản, reset MK: MK cũ/`rgb@2026` → 401, MK mới → 200) |
+
+### Cách kiểm chứng giao diện cần đăng nhập
+- Không dùng tài khoản thật. Dựng backend tạm như e2e (`scripts/e2e/helpers.mjs`: schema Postgres riêng, admin có mật khẩu sinh ngẫu nhiên) ở một cổng riêng, và một Vite phụ (`VITE_PROXY_TARGET=http://127.0.0.1:<cổng>`, `--port 5174`) chạy qua một cấu hình tạm trong `.claude/launch.json`. Xong thì gỡ cấu hình và `DROP SCHEMA` (dừng preview là kill thẳng, script không kịp dọn).
 
 ### Cách kiểm chứng exe Agent (dùng lại khi đổi agent)
 - Build ra scratchpad bằng bản sao `electron-builder.yml` chỉ đổi `directories.output` và nguồn `config.json` (dùng config giả, tránh nhúng token thật): `electron-builder --win portable --config <copy> -c.extraMetadata.version=<x>`.
@@ -37,13 +40,7 @@ Trước mỗi giai đoạn: `pnpm check && pnpm test && pnpm test:e2e` phải �
 
 ## Còn lại
 
-### GĐ7 — Tách các panel
-- `HnthPanel.tsx` (1.094 dòng): `HnthAgentSelector`, `HnthPointConfigForm`, `HnthPointList`, `useHnthMonitoring`, `hnth-import-export` (đã có test CSV).
-- `HnthStatusMetrics.tsx`: popup log ra component riêng.
-- `App.tsx`: `SystemStatusBar`, `features/auth/` (modal đăng nhập/hồ sơ/đổi mật khẩu), `useOperationalLayerLoader`.
-- `UserAdminPanel.tsx`: 25 dòng nhưng dòng dài tới 2.600 ký tự — viết lại cho đọc được; bỏ reset mật khẩu về chuỗi cứng.
-
-### GĐ6 — Tách `MapCanvas.tsx` (2.909 dòng, 37 `useEffect`) — rủi ro cao nhất
+### GĐ6 — Tách `MapCanvas.tsx` (2.881 dòng, 37 `useEffect`) — rủi ro cao nhất
 - `MapCanvas` chỉ tạo bản đồ + context; hook `useBaseMap`, `useInitialViewport`, `useAdministrativeLayers`, `useOperationalLayers`, `useHnthLayer`, `useDrawTools`, `useAnnotations`, `usePresentationBridge`; card thông tin ra file riêng; hàm thuần vào `map/lib/` kèm test.
 - Mỗi hook một commit, kèm danh sách thao tác kiểm tra bằng mắt cho người dùng (không test tự động được phần vẽ).
 
@@ -53,7 +50,7 @@ Trước mỗi giai đoạn: `pnpm check && pnpm test && pnpm test:e2e` phải �
 ## Quyết định còn chờ người dùng
 
 1. Xóa hẳn `services/hnth-relay` (relay cũ, backend đã thay thế)?
-2. Thay `xlsx@0.18.5` (có CVE) khi làm GĐ7?
+2. Thay `xlsx@0.18.5` (có CVE): người dùng chọn **để sau**; mọi chỗ dùng đã gom vào `core/spreadsheet.ts`, khi thay chỉ sửa file đó.
 3. Migration theo phiên bản cho `db.mjs` (hiện là một script idempotent) — chưa làm, cần chọn cách trước.
 
 ## Trạng thái môi trường máy dev (lúc bàn giao)

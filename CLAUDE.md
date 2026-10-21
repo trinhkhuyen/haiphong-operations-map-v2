@@ -104,5 +104,5 @@ docker compose --env-file .env.source -f docker-compose.source.yml up -d --build
 1. **Repo cũ**: từ 2026-10-21 làm việc trên `origin` = `trinhkhuyen/haiphong-operations-map-v2` (lịch sử sạch, bắt đầu từ `d8337c4`). Repo cũ `haiphong-operations-map` đã archive (chỉ đọc) trên GitHub và vẫn chứa `.codex_tmp/` trong lịch sử. Bản sao cục bộ cũ (`Documents\Map`, nhánh `legacy-main`, `.codex_tmp/`, `artifacts/`, exe 0.1.x) đã bị xóa.
 2. Backend: không rate-limit `/api/auth/login`; cookie refresh thiếu `Secure`; message lỗi 500 trả nguyên `error.message`; schema vẫn là một script idempotent trong `db.mjs` (chưa có migration theo phiên bản).
 3. Agent: ~~`test-point` đưa `ipAddress` chưa kiểm tra vào `ping.exe`~~ — đã xử lý ở GĐ3 (`pingHost` chỉ nhận literal IPv4/IPv6). Backend `/api/hnth/test` vẫn chưa validate `ipAddress`.
-4. Web: `UserAdminPanel` reset mật khẩu về chuỗi cứng; `xlsx@0.18.5` (bản npm đã ngừng, có CVE); `MapCanvas.tsx` ~2.900 dòng; bundle `index`/`map` >900 kB.
+4. Web: `xlsx@0.18.5` (bản npm đã ngừng, có CVE) — đã gom vào `core/spreadsheet.ts`, người dùng chọn thay sau; `MapCanvas.tsx` ~2.900 dòng; bundle `index`/`map` >900 kB. Backend `PUT /api/users/:id` không kiểm tra độ dài mật khẩu (UI chặn < 8 ký tự).
 5. Chưa có lint và CI (đã có unit test + e2e).

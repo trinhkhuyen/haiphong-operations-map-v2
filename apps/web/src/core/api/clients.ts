@@ -34,3 +34,11 @@ export const agentsApi = {
     return hnthFetch(apiUrl(`/api/agent-releases${params}`), { method: "POST", headers: { "content-type": "application/octet-stream" }, body: file });
   },
 };
+
+export const usersApi = {
+  list: () => hnthFetch(apiUrl("/api/users")),
+  create: (body: Record<string, unknown>) => hnthFetch(apiUrl("/api/users"), jsonRequest("POST", body)),
+  /** PUT thay toàn bộ hồ sơ; có `password` thì đổi luôn mật khẩu. */
+  update: (id: string, body: Record<string, unknown>) => hnthFetch(apiUrl(`/api/users/${id}`), jsonRequest("PUT", body)),
+  disable: (id: string) => hnthFetch(apiUrl(`/api/users/${id}`), { method: "DELETE" }),
+};

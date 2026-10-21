@@ -1,26 +1,212 @@
 import { useEffect, useRef, useState } from "react";
-import * as XLSX from "xlsx";
-import { API_BASE } from "../../core/api/base";
-import { hnthFetch } from "../../core/api/http";
-type Role = "admin" | "operator" | "viewer";
-type User = { id:string; username:string; displayName:string; role:Role; isActive:boolean; department?:string; phone?:string; menuPermissions?:string[] };
-type UserForm = { username:string; displayName:string; password:string; role:Role; department:string; phone:string; menuPermissions:string[] };
-const menus = [{id:"layers",label:"Lớp dữ liệu"},{id:"zones",label:"Khoanh vùng"},{id:"saved",label:"Đối tượng đã lưu"},{id:"routing",label:"Định tuyến"},{id:"conference",label:"HNTH"},{id:"agents",label:"Agents"}];
-const base=API_BASE;
-const emptyForm=():UserForm=>({username:"",displayName:"",password:"",role:"viewer",department:"",phone:"",menuPermissions:menus.map(x=>x.id)});
-const norm=(v:unknown)=>String(v??"").trim().toLocaleLowerCase("vi").normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/đ/g,"d").replace(/\s+/g," ");
-const col=(row:Record<string,unknown>, names:string[])=>String(Object.entries(row).find(([k])=>names.includes(norm(k)))?.[1]??"").trim();
-const role=(v:string):Role=>["admin","quan tri","quan tri he thong"].includes(norm(v))?"admin":["operator","van hanh"].includes(norm(v))?"operator":"viewer";
+import { usersApi } from "../../core/api/clients";
+import { downloadWorkbook, readFirstSheetObjects } from "../../core/spreadsheet";
 
-export function UserAdminPanel({onClose}:{onClose:()=>void}){
- const [users,setUsers]=useState<User[]>([]); const [form,setForm]=useState<UserForm>(emptyForm); const [editing,setEditing]=useState<User|null>(null); const [selected,setSelected]=useState<string|null>(null); const [search,setSearch]=useState(""); const [message,setMessage]=useState(""); const input=useRef<HTMLInputElement>(null);
- const load=async()=>{const r=await hnthFetch(`${base}/api/users`);if(!r.ok)throw new Error(r.status===403?"Chỉ quản trị viên mới được quản lý tài khoản":"Không tải được tài khoản");setUsers(await r.json());}; useEffect(()=>{void load().catch((e:Error)=>setMessage(e.message));},[]);
- const save=async(e:React.FormEvent)=>{e.preventDefault();const r=await hnthFetch(editing?`${base}/api/users/${editing.id}`:`${base}/api/users`,{method:editing?"PUT":"POST",headers:{"content-type":"application/json"},body:JSON.stringify({...form,isActive:true})});const b=await r.json();if(!r.ok){setMessage(b.error||"Không thể lưu");return;}setMessage(editing?"Đã cập nhật tài khoản":"Đã thêm tài khoản");setEditing(null);setForm(emptyForm());void load();};
- const edit=(u:User)=>{setEditing(u);setSelected(u.id);setForm({username:u.username,displayName:u.displayName,password:"",role:u.role,department:u.department||"",phone:u.phone||"",menuPermissions:u.menuPermissions||menus.map(x=>x.id)});};
- const remove=async(u:User)=>{if(!window.confirm(`Vô hiệu hóa tài khoản ${u.username}?`))return;const r=await hnthFetch(`${base}/api/users/${u.id}`,{method:"DELETE"});if(r.ok){setMessage("Đã vô hiệu hóa tài khoản");void load();}};
- const resetPassword=async(u:User)=>{if(!window.confirm(`Reset mật khẩu tài khoản ${u.username} về rgb@2026?`))return;const r=await hnthFetch(`${base}/api/users/${u.id}`,{method:"PUT",headers:{"content-type":"application/json"},body:JSON.stringify({displayName:u.displayName||u.username,role:u.role,department:u.department||"",phone:u.phone||"",menuPermissions:u.menuPermissions||menus.map(x=>x.id),isActive:u.isActive,password:"rgb@2026"})});const b=await r.json().catch(()=>({}));setMessage(r.ok?`Đã reset mật khẩu cho ${u.username}`:(b.error||"Không thể reset mật khẩu"));};
- const exportUsers=()=>{const headers=["STT","Username","Password","Quyền","Họ và tên","Đơn vị","Số điện thoại"];const rows=users.map((u,i)=>({STT:i+1,Username:u.username,Password:"",Quyền:u.role,"Họ và tên":u.displayName||u.username,"Đơn vị":u.department||"","Số điện thoại":u.phone||""}));const sheet=XLSX.utils.json_to_sheet(rows,{header:headers});sheet["!cols"]=[{wch:8},{wch:22},{wch:18},{wch:14},{wch:28},{wch:32},{wch:20}];for(let i=0;i<headers.length;i++){const cell=sheet[XLSX.utils.encode_cell({r:0,c:i})];if(cell)cell.s={font:{bold:true}};}const list=XLSX.utils.aoa_to_sheet([["Quyền"],["admin"],["operator"],["viewer"]]);list["!cols"]=[{wch:16}];(sheet as XLSX.WorkSheet & {"!dataValidation"?:unknown})["!dataValidation"]=[{sqref:`D2:D${Math.max(rows.length+1,2)}`,type:"list",formula1:"'Quyen'!$A$2:$A$4",allowBlank:true}];const book=XLSX.utils.book_new();XLSX.utils.book_append_sheet(book,sheet,"Tai khoan");XLSX.utils.book_append_sheet(book,list,"Quyen");XLSX.writeFile(book,"tai-khoan.xlsx",{cellStyles:true});setMessage("Đã xuất tài khoản. Cột Password để trống vì không thể đọc lại mật khẩu.");};
- const importUsers=async(e:React.ChangeEvent<HTMLInputElement>)=>{const file=e.target.files?.[0];e.target.value="";if(!file)return;try{const wb=XLSX.read(await file.arrayBuffer(),{type:"array"});const rows=XLSX.utils.sheet_to_json<Record<string,unknown>>(wb.Sheets[wb.SheetNames[0]],{defval:""});let created=0,updated=0;const errors:string[]=[];for(const [i,row] of rows.entries()){const n=i+2,u=col(row,["username","ten dang nhap","tai khoan"]),p=col(row,["password","mat khau","pass"]),old=users.find(x=>x.username.toLowerCase()===u.toLowerCase());if(!u){errors.push(`dòng ${n}: thiếu username`);continue;}if(old&&!p){const r=await hnthFetch(`${base}/api/users/${old.id}`,{method:"PUT",headers:{"content-type":"application/json"},body:JSON.stringify({displayName:old.displayName||old.username,role:old.role,department:col(row,["don vi","department"]),phone:col(row,["so dien thoai","phone","dien thoai"]),menuPermissions:old.menuPermissions||menus.map(x=>x.id),isActive:old.isActive})});if(r.ok)updated++;else errors.push(`dòng ${n}: không thể cập nhật`);continue;}if(!p){errors.push(`dòng ${n}: tài khoản mới phải có password`);continue;}if(p.length<8){errors.push(`dòng ${n}: mật khẩu phải có ít nhất 8 ký tự`);continue;}if(old){errors.push(`dòng ${n}: tài khoản đã tồn tại, để trống password để cập nhật thông tin`);continue;}const r=await hnthFetch(`${base}/api/users`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({username:u,password:p,displayName:col(row,["ten hien thi","display name","ho ten"])||u,role:role(col(row,["quyen","role"])),department:col(row,["don vi","department"]),phone:col(row,["so dien thoai","phone","dien thoai"]),isActive:true,menuPermissions:menus.map(x=>x.id)})});if(r.ok)created++;else errors.push(`dòng ${n}: không thể tạo`);}await load();setMessage(`Đã tạo ${created}, cập nhật ${updated} tài khoản${errors.length?`. Bỏ qua: ${errors.join("; ")}`:""}`);}catch{setMessage("Không đọc được file XLSX");}};
- const shown=users.filter(u=>norm(`${u.username} ${u.displayName} ${u.department||""} ${u.phone||""}`).includes(norm(search)));
- return <div className="admin-users-overlay"><section className="admin-users-card"><header><div><span>QUẢN TRỊ HỆ THỐNG</span><h2>Tài khoản người dùng</h2></div><button onClick={onClose}>×</button></header><div className="admin-users-search"><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Tìm username, tên, đơn vị, số điện thoại..."/></div><form id="user-admin-form" onSubmit={save} className="admin-users-form"><input value={form.username} disabled={Boolean(editing)} onChange={e=>setForm({...form,username:e.target.value})} placeholder="Tên đăng nhập" required/><input value={form.displayName} onChange={e=>setForm({...form,displayName:e.target.value})} placeholder="Tên hiển thị" required/><input value={form.password} onChange={e=>setForm({...form,password:e.target.value})} placeholder={editing?"Mật khẩu mới (bỏ trống nếu giữ nguyên)":"Mật khẩu tối thiểu 8 ký tự"} type="password" required={!editing}/><input value={form.department} onChange={e=>setForm({...form,department:e.target.value})} placeholder="Đơn vị"/><input value={form.phone} onChange={e=>setForm({...form,phone:e.target.value})} placeholder="Số điện thoại"/><select value={form.role} onChange={e=>setForm({...form,role:e.target.value as Role})}><option value="viewer">Guest/Viewer — Chọn menu được phép</option><option value="operator">Operator — Vận hành</option><option value="admin">Admin — Quản trị</option></select>{editing&&<button type="button" onClick={()=>{setEditing(null);setForm(emptyForm());}}>Hủy</button>}</form><div className="admin-users-toolbar"><button className="primary-button" type="submit" form="user-admin-form">{editing?"Lưu thay đổi":"Thêm tài khoản"}</button><button type="button" onClick={()=>input.current?.click()}>Import</button><button type="button" onClick={exportUsers}>Export</button><input ref={input} type="file" accept=".xlsx" hidden onChange={importUsers}/></div>{message&&<p className="panel-message">{message}</p>}<div className="admin-users-list">{shown.map(u=><div className="admin-user-row" key={u.id}><div className="admin-user-summary" onClick={()=>setSelected(selected===u.id?null:u.id)}><strong>{u.displayName||u.username}</strong><small>{u.username} · {u.role} · {u.isActive?"Đang hoạt động":"Đã vô hiệu hóa"}</small>{selected===u.id&&<div className="admin-users-details"><span>Quyền: {u.role}</span><span>Đơn vị: {u.department||"Chưa cập nhật"}</span><span>Số điện thoại: {u.phone||"Chưa cập nhật"}</span></div>}</div><button onClick={()=>edit(u)}>Sửa</button><button onClick={()=>void resetPassword(u)}>Reset MK</button><button onClick={()=>void remove(u)}>Xóa</button></div>)}</div></section></div>;
+type Role = "admin" | "operator" | "viewer";
+type User = { id: string; username: string; displayName: string; role: Role; isActive: boolean; department?: string; phone?: string; menuPermissions?: string[] };
+type UserForm = { username: string; displayName: string; password: string; role: Role; department: string; phone: string; menuPermissions: string[] };
+
+const menus = [
+  { id: "layers", label: "Lớp dữ liệu" },
+  { id: "zones", label: "Khoanh vùng" },
+  { id: "saved", label: "Đối tượng đã lưu" },
+  { id: "routing", label: "Định tuyến" },
+  { id: "conference", label: "HNTH" },
+  { id: "agents", label: "Agents" },
+];
+const allMenuIds = () => menus.map((menu) => menu.id);
+const MIN_PASSWORD_LENGTH = 8;
+
+const emptyForm = (): UserForm => ({ username: "", displayName: "", password: "", role: "viewer", department: "", phone: "", menuPermissions: allMenuIds() });
+
+// Chuẩn hóa để so khớp tiêu đề cột/tìm kiếm: bỏ dấu, đ -> d, gộp khoảng trắng.
+const norm = (value: unknown) => String(value ?? "").trim().toLocaleLowerCase("vi").normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/đ/g, "d").replace(/\s+/g, " ");
+/** Giá trị ô theo một trong các tên cột (đã chuẩn hóa) của dòng Excel. */
+const column = (row: Record<string, unknown>, names: string[]) => String(Object.entries(row).find(([key]) => names.includes(norm(key)))?.[1] ?? "").trim();
+const parseRole = (value: string): Role => ["admin", "quan tri", "quan tri he thong"].includes(norm(value)) ? "admin" : ["operator", "van hanh"].includes(norm(value)) ? "operator" : "viewer";
+
+/** Hồ sơ gửi kèm PUT: backend thay toàn bộ, nên luôn gửi đủ các trường hiện có. */
+const profileOf = (user: User) => ({
+  displayName: user.displayName || user.username,
+  role: user.role,
+  department: user.department || "",
+  phone: user.phone || "",
+  menuPermissions: user.menuPermissions || allMenuIds(),
+  isActive: user.isActive,
+});
+
+export function UserAdminPanel({ onClose }: { onClose: () => void }) {
+  const [users, setUsers] = useState<User[]>([]);
+  const [form, setForm] = useState<UserForm>(emptyForm);
+  const [editing, setEditing] = useState<User | null>(null);
+  const [selected, setSelected] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+  const [message, setMessage] = useState("");
+  const [resetTarget, setResetTarget] = useState<User | null>(null);
+  const [resetPassword, setResetPassword] = useState("");
+  const [resetError, setResetError] = useState("");
+  const importInput = useRef<HTMLInputElement>(null);
+
+  const load = async () => {
+    const response = await usersApi.list();
+    if (!response.ok) throw new Error(response.status === 403 ? "Chỉ quản trị viên mới được quản lý tài khoản" : "Không tải được tài khoản");
+    setUsers(await response.json());
+  };
+  useEffect(() => { void load().catch((error: Error) => setMessage(error.message)); }, []);
+
+  const save = async (event: React.FormEvent) => {
+    event.preventDefault();
+    const body = { ...form, isActive: true };
+    const response = editing ? await usersApi.update(editing.id, body) : await usersApi.create(body);
+    const payload = await response.json();
+    if (!response.ok) { setMessage(payload.error || "Không thể lưu"); return; }
+    setMessage(editing ? "Đã cập nhật tài khoản" : "Đã thêm tài khoản");
+    setEditing(null);
+    setForm(emptyForm());
+    void load();
+  };
+
+  const edit = (user: User) => {
+    setEditing(user);
+    setSelected(user.id);
+    setForm({ username: user.username, displayName: user.displayName, password: "", role: user.role, department: user.department || "", phone: user.phone || "", menuPermissions: user.menuPermissions || allMenuIds() });
+  };
+
+  const remove = async (user: User) => {
+    if (!window.confirm(`Vô hiệu hóa tài khoản ${user.username}?`)) return;
+    const response = await usersApi.disable(user.id);
+    if (response.ok) { setMessage("Đã vô hiệu hóa tài khoản"); void load(); }
+  };
+
+  // Admin tự nhập mật khẩu mới cho tài khoản (không còn mật khẩu reset cố định).
+  const openReset = (user: User) => { setResetTarget(user); setResetPassword(""); setResetError(""); };
+  const submitReset = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!resetTarget) return;
+    if (resetPassword.length < MIN_PASSWORD_LENGTH) { setResetError(`Mật khẩu phải có ít nhất ${MIN_PASSWORD_LENGTH} ký tự`); return; }
+    const response = await usersApi.update(resetTarget.id, { ...profileOf(resetTarget), password: resetPassword });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) { setResetError(payload.error || "Không thể đặt lại mật khẩu"); return; }
+    setMessage(`Đã đặt mật khẩu mới cho ${resetTarget.username}`);
+    setResetTarget(null);
+    setResetPassword("");
+  };
+
+  const exportUsers = () => {
+    const headers = ["STT", "Username", "Password", "Quyền", "Họ và tên", "Đơn vị", "Số điện thoại"];
+    const rows = users.map((user, index) => [index + 1, user.username, "", user.role, user.displayName || user.username, user.department || "", user.phone || ""]);
+    downloadWorkbook("tai-khoan.xlsx", [
+      {
+        name: "Tai khoan",
+        rows: [headers, ...rows],
+        columnWidths: [8, 22, 18, 14, 28, 32, 20],
+        boldHeader: true,
+        // Cột Quyền chọn từ danh sách ở sheet "Quyen".
+        listValidation: { sqref: `D2:D${Math.max(rows.length + 1, 2)}`, formula1: "'Quyen'!$A$2:$A$4" },
+      },
+      { name: "Quyen", rows: [["Quyền"], ["admin"], ["operator"], ["viewer"]], columnWidths: [16] },
+    ]);
+    setMessage("Đã xuất tài khoản. Cột Password để trống vì không thể đọc lại mật khẩu.");
+  };
+
+  // Dòng có username đã tồn tại và Password trống: cập nhật Đơn vị/SĐT. Dòng mới:
+  // phải có Password >= 8 ký tự. Dòng đã tồn tại nhưng có Password: bỏ qua.
+  const importUsers = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    try {
+      const rows = await readFirstSheetObjects(file);
+      let created = 0;
+      let updated = 0;
+      const errors: string[] = [];
+      for (const [index, row] of rows.entries()) {
+        const line = index + 2;
+        const username = column(row, ["username", "ten dang nhap", "tai khoan"]);
+        const password = column(row, ["password", "mat khau", "pass"]);
+        const existing = users.find((user) => user.username.toLowerCase() === username.toLowerCase());
+        const department = column(row, ["don vi", "department"]);
+        const phone = column(row, ["so dien thoai", "phone", "dien thoai"]);
+        if (!username) { errors.push(`dòng ${line}: thiếu username`); continue; }
+        if (existing && !password) {
+          const response = await usersApi.update(existing.id, { ...profileOf(existing), department, phone });
+          if (response.ok) updated++; else errors.push(`dòng ${line}: không thể cập nhật`);
+          continue;
+        }
+        if (!password) { errors.push(`dòng ${line}: tài khoản mới phải có password`); continue; }
+        if (password.length < MIN_PASSWORD_LENGTH) { errors.push(`dòng ${line}: mật khẩu phải có ít nhất 8 ký tự`); continue; }
+        if (existing) { errors.push(`dòng ${line}: tài khoản đã tồn tại, để trống password để cập nhật thông tin`); continue; }
+        const response = await usersApi.create({
+          username,
+          password,
+          displayName: column(row, ["ten hien thi", "display name", "ho ten"]) || username,
+          role: parseRole(column(row, ["quyen", "role"])),
+          department,
+          phone,
+          isActive: true,
+          menuPermissions: allMenuIds(),
+        });
+        if (response.ok) created++; else errors.push(`dòng ${line}: không thể tạo`);
+      }
+      await load();
+      setMessage(`Đã tạo ${created}, cập nhật ${updated} tài khoản${errors.length ? `. Bỏ qua: ${errors.join("; ")}` : ""}`);
+    } catch {
+      setMessage("Không đọc được file XLSX");
+    }
+  };
+
+  const shown = users.filter((user) => norm(`${user.username} ${user.displayName} ${user.department || ""} ${user.phone || ""}`).includes(norm(search)));
+  const updateForm = (patch: Partial<UserForm>) => setForm({ ...form, ...patch });
+
+  return <div className="admin-users-overlay">
+    <section className="admin-users-card">
+      <header><div><span>QUẢN TRỊ HỆ THỐNG</span><h2>Tài khoản người dùng</h2></div><button onClick={onClose}>×</button></header>
+      <div className="admin-users-search"><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Tìm username, tên, đơn vị, số điện thoại..."/></div>
+      <form id="user-admin-form" onSubmit={save} className="admin-users-form">
+        <input value={form.username} disabled={Boolean(editing)} onChange={(event) => updateForm({ username: event.target.value })} placeholder="Tên đăng nhập" required/>
+        <input value={form.displayName} onChange={(event) => updateForm({ displayName: event.target.value })} placeholder="Tên hiển thị" required/>
+        <input value={form.password} onChange={(event) => updateForm({ password: event.target.value })} placeholder={editing ? "Mật khẩu mới (bỏ trống nếu giữ nguyên)" : "Mật khẩu tối thiểu 8 ký tự"} type="password" required={!editing}/>
+        <input value={form.department} onChange={(event) => updateForm({ department: event.target.value })} placeholder="Đơn vị"/>
+        <input value={form.phone} onChange={(event) => updateForm({ phone: event.target.value })} placeholder="Số điện thoại"/>
+        <select value={form.role} onChange={(event) => updateForm({ role: event.target.value as Role })}>
+          <option value="viewer">Guest/Viewer — Chọn menu được phép</option>
+          <option value="operator">Operator — Vận hành</option>
+          <option value="admin">Admin — Quản trị</option>
+        </select>
+        {editing && <button type="button" onClick={() => { setEditing(null); setForm(emptyForm()); }}>Hủy</button>}
+      </form>
+      <div className="admin-users-toolbar">
+        <button className="primary-button" type="submit" form="user-admin-form">{editing ? "Lưu thay đổi" : "Thêm tài khoản"}</button>
+        <button type="button" onClick={() => importInput.current?.click()}>Import</button>
+        <button type="button" onClick={exportUsers}>Export</button>
+        <input ref={importInput} type="file" accept=".xlsx" hidden onChange={importUsers}/>
+      </div>
+      {message && <p className="panel-message">{message}</p>}
+      <div className="admin-users-list">
+        {shown.map((user) => <div className="admin-user-row" key={user.id}>
+          <div className="admin-user-summary" onClick={() => setSelected(selected === user.id ? null : user.id)}>
+            <strong>{user.displayName || user.username}</strong>
+            <small>{user.username} · {user.role} · {user.isActive ? "Đang hoạt động" : "Đã vô hiệu hóa"}</small>
+            {selected === user.id && <div className="admin-users-details">
+              <span>Quyền: {user.role}</span>
+              <span>Đơn vị: {user.department || "Chưa cập nhật"}</span>
+              <span>Số điện thoại: {user.phone || "Chưa cập nhật"}</span>
+            </div>}
+          </div>
+          <button onClick={() => edit(user)}>Sửa</button>
+          <button onClick={() => openReset(user)}>Reset MK</button>
+          <button onClick={() => void remove(user)}>Xóa</button>
+        </div>)}
+      </div>
+    </section>
+    {resetTarget && <div className="auth-overlay">
+      <form className="auth-card" onSubmit={(event) => void submitReset(event)}>
+        <h2>Đặt mật khẩu mới</h2>
+        <small>Tài khoản <b>{resetTarget.username}</b>. Báo mật khẩu này cho người dùng; họ có thể tự đổi sau khi đăng nhập.</small>
+        <input value={resetPassword} onChange={(event) => setResetPassword(event.target.value)} placeholder={`Mật khẩu mới (tối thiểu ${MIN_PASSWORD_LENGTH} ký tự)`} type="password" autoComplete="new-password" autoFocus/>
+        <div className="auth-actions"><button type="button" onClick={() => setResetTarget(null)}>Hủy</button><button className="primary-button" type="submit">Lưu mật khẩu</button></div>
+        {resetError && <small className="auth-error">{resetError}</small>}
+      </form>
+    </div>}
+  </div>;
 }
