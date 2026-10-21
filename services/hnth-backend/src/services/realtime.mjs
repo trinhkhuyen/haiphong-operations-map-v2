@@ -19,10 +19,31 @@ export function createRealtime(config) {
     return result.rows[0]?.agent_id || config.defaultAgentId;
   }
 
+  // B: hết lease (không còn trang Operator nào gia hạn) thì tắt cờ giám sát và gửi
+  // monitor-stop cho Agent. Trả true khi vừa tắt để nơi gọi phát lại trạng thái.
+  async function expireMonitorLease() {
+    const expired = await pool.query("UPDATE monitor_state SET enabled=false,started_at=NULL,lease_expires_at=NULL,updated_at=now(),revision=revision+1 WHERE id=1 AND enabled AND lease_expires_at < now() RETURNING agent_id");
+    if (!expired.rowCount) return false;
+    const agentId = expired.rows[0].agent_id;
+    await pool.query("UPDATE commands SET status='superseded' WHERE agent_id=$1 AND status='pending' AND type IN ('monitor-start','monitor-stop')", [agentId]);
+    await pool.query("INSERT INTO commands(agent_id,type,payload) VALUES($1,'monitor-stop',$2)", [agentId, JSON.stringify({ reason: "lease-expired" })]);
+    console.log(`[${new Date().toISOString()}] monitoring lease expired; sent monitor-stop to ${agentId}`);
+    return true;
+  }
+
+  /** Quét lease định kỳ, kể cả khi không ai đọc trạng thái. unref để không giữ tiến trình sống. */
+  function startLeaseSweeper(intervalMs = 15000) {
+    const timer = setInterval(() => void expireMonitorLease().then((expired) => expired && broadcastState()).catch((error) => console.error(`Monitor lease sweep failed: ${error.message}`)), intervalMs);
+    timer.unref();
+    return () => clearInterval(timer);
+  }
+
   /** Snapshot đầy đủ dùng chung cho /api/hnth/monitor-state, /status và SSE. */
   async function currentState() {
-    const monitor = await pool.query("SELECT enabled,agent_id AS \"agentId\",concurrency,wait_seconds AS \"waitSeconds\",session_id AS \"sessionId\",started_at AS \"startedAt\",updated_at AS \"updatedAt\",revision FROM monitor_state WHERE id=1");
-    const row = monitor.rows[0] || { enabled: false, agentId: config.defaultAgentId, concurrency: 1, waitSeconds: 3, sessionId: null, startedAt: null, updatedAt: null, revision: 0 };
+    // Kiểm tra lease ngay khi đọc để không trả cờ "đang giám sát" đã hết hạn.
+    if (await expireMonitorLease()) setImmediate(() => void broadcastState());
+    const monitor = await pool.query("SELECT enabled,agent_id AS \"agentId\",concurrency,wait_seconds AS \"waitSeconds\",session_id AS \"sessionId\",started_at AS \"startedAt\",updated_at AS \"updatedAt\",lease_expires_at AS \"leaseExpiresAt\",revision FROM monitor_state WHERE id=1");
+    const row = monitor.rows[0] || { enabled: false, agentId: config.defaultAgentId, concurrency: 1, waitSeconds: 3, sessionId: null, startedAt: null, updatedAt: null, leaseExpiresAt: null, revision: 0 };
     const [agentConfig, agents] = await Promise.all([
       pool.query("SELECT monitor_config AS \"monitorConfig\" FROM agents WHERE agent_id=$1", [row.agentId]),
       pool.query(`SELECT ${AGENT_SUMMARY_COLUMNS} FROM agents ORDER BY agent_id`),
@@ -59,5 +80,5 @@ export function createRealtime(config) {
 
   const healthCheck = () => pool.query("SELECT 1");
 
-  return { selectedAgentId, currentState, broadcast, broadcastState, openStream, healthCheck };
+  return { selectedAgentId, expireMonitorLease, startLeaseSweeper, currentState, broadcast, broadcastState, openStream, healthCheck };
 }

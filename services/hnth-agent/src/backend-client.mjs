@@ -1,3 +1,5 @@
+import { setAgentState } from "./status.mjs";
+
 // Mọi request tới backend (hoặc relay cũ khi backendUrl rỗng) đi qua đây để log
 // chuyển trạng thái kết nối đúng một lần mỗi khi đổi.
 export function createBackendClient(config) {
@@ -8,9 +10,13 @@ export function createBackendClient(config) {
   const authHeaders = () => ({ authorization: `Bearer ${config.token}`, "content-type": "application/json" });
 
   let connection = "unknown";
+  // Lần cuối backend trả lời 2xx; monitor dùng để tự dừng khi mất backend quá lâu.
+  // Tính từ lúc khởi động để Agent không dừng ngay khi backend chưa kịp trả lời lần đầu.
+  let lastContactAt = Date.now();
   function reportConnection(next, detail = "") {
     if (connection === next) return;
     connection = next;
+    setAgentState({ backend: next });
     const prefix = next === "online" ? "BACKEND ONLINE" : next === "offline" ? "BACKEND OFFLINE" : "BACKEND AUTH ERROR";
     console.log(`[${new Date().toISOString()}] ${prefix}${detail ? `: ${detail}` : ""}`);
   }
@@ -18,6 +24,7 @@ export function createBackendClient(config) {
   async function request(url, options = {}) {
     try {
       const response = await fetch(url, options);
+      if (response.ok) lastContactAt = Date.now();
       if (response.status === 401 || response.status === 403) reportConnection("unauthorized", `${response.status} at ${new URL(url).pathname}`);
       else reportConnection(response.ok ? "online" : "offline", response.ok ? "" : `${response.status} at ${new URL(url).pathname}`);
       return response;
@@ -43,5 +50,5 @@ export function createBackendClient(config) {
     return target;
   }
 
-  return { apiBase, apiUrl, telemetryUrl, authHeaders, request, postJson, commandsUrl, discoveredIpsUrl };
+  return { msSinceContact: () => Date.now() - lastContactAt, apiBase, apiUrl, telemetryUrl, authHeaders, request, postJson, commandsUrl, discoveredIpsUrl };
 }

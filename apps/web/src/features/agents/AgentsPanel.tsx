@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
-import { Activity, Check, KeyRound, Network, Pencil, RadioTower, RefreshCw, Settings2, Wifi, WifiOff, X } from "lucide-react";
+import { createPortal } from "react-dom";
+import { Activity, Check, KeyRound, Network, Pencil, RadioTower, RefreshCw, Settings2, Trash2, Wifi, WifiOff, X } from "lucide-react";
 import { compareVersions, EXE_VERSION_SCAN_BYTES, readExeVersion as readExeVersionBytes } from "@haiphong-ops/hnth-protocol";
 import { agentsApi } from "../../core/api/clients";
 import { emitAppEvent } from "../../core/events";
@@ -60,6 +61,19 @@ export function AgentsPanel() {
   }, []);
 
   useEffect(() => { void load(); const timer = window.setInterval(() => void load(), 10000); return () => window.clearInterval(timer); }, [load]);
+
+  const removeAgent = async (agent: Agent) => {
+    if (agent.status === "online") { setError(`Agent "${agent.name}" đang online. Tắt Agent trên máy trước khi xóa, nếu không nó sẽ tự đăng ký lại.`); return; }
+    if (!window.confirm(`Xóa Agent "${agent.name}" (${agent.agentId}) khỏi danh sách?
+Lịch sử log giám sát vẫn được giữ lại.`)) return;
+    setError("");
+    try {
+      const response = await agentsApi.remove(agent.agentId);
+      if (response.status === 401 || response.status === 403) { setRequiresLogin(true); setError("Chỉ tài khoản Admin được xóa Agent."); return; }
+      if (!response.ok && response.status !== 404) { const payload = await response.json().catch(() => ({})) as { error?: string }; throw new Error(payload.error || `Không xóa được Agent (HTTP ${response.status})`); }
+      await load();
+    } catch (removeError) { setError(removeError instanceof Error ? removeError.message : "Không xóa được Agent."); }
+  };
 
   const openEditor = (agent: Agent) => {
     const cfg = agent.monitorConfig || {};
@@ -149,9 +163,11 @@ export function AgentsPanel() {
         <div className="agent-status">{agent.status === "online" ? <Wifi size={17}/> : <WifiOff size={17}/>}</div>
         <div className="agent-info"><strong>{agent.name}</strong><small>{agent.agentId}</small><em className={agent.status}>{agent.status === "online" ? "Đang online" : "Offline"}{agent.lastSeenAt ? ` · ${new Date(agent.lastSeenAt).toLocaleString("vi-VN")}` : ""} · Heartbeat {agent.heartbeatSeconds || 30}s{agent.version ? ` · v${agent.version}` : ""}</em></div>
         <button className="icon-button" onClick={() => openEditor(agent)} title="Đổi tên và cấu hình Agent"><Pencil size={15}/></button>
+        <button className="icon-button agent-delete-button" onClick={() => void removeAgent(agent)} disabled={agent.status === "online"} title={agent.status === "online" ? "Agent đang online — tắt Agent trước khi xóa" : "Xóa Agent khỏi danh sách"} aria-label={`Xóa Agent ${agent.name}`}><Trash2 size={15}/></button>
       </article>)}
     </div>
-    {editing && <div className="hnth-modal-backdrop agent-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setEditing(null); }}>
+    {/* Portal ra body: .side-panel có z-index tạo stacking context, modal để bên trong sẽ nằm dưới các popup trên bản đồ. */}
+    {editing && createPortal(<div className="hnth-modal-backdrop agent-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setEditing(null); }}>
       <section className="hnth-modal agent-config-modal" role="dialog" aria-modal="true" aria-label={`Cấu hình Agent ${editing.name}`}>
         <header><span><Settings2 size={17}/><strong>Cấu hình Agent</strong></span><button onClick={() => setEditing(null)} aria-label="Đóng cửa sổ"><X size={18}/></button></header>
         <div className="agent-modal-content">
@@ -168,6 +184,6 @@ export function AgentsPanel() {
           <footer><button className="secondary-button" onClick={() => setEditing(null)}>Hủy</button><button className="primary-button" onClick={() => void save()}><Check size={15}/>Lưu cấu hình</button></footer>
         </div>
       </section>
-    </div>}
+    </div>, document.body)}
   </section>;
 }

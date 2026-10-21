@@ -1,7 +1,7 @@
 {
   "name": "@haiphong-ops/hnth-agent",
   "private": true,
-  "version": "0.2.4",
+  "version": "0.2.6",
   "description": "HNTH network monitoring agent for Windows",
   "author": "Hai Phong Operations",
   "main": "desktop/main.cjs",

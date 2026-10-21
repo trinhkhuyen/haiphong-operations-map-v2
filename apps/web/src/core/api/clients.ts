@@ -18,6 +18,8 @@ export const hnthApi = {
   testPoint: (body: { pointId: string; ipAddress: string }) => hnthFetch(apiUrl("/api/hnth/test"), jsonRequest("POST", body)),
   pointConfig: (body: PointConfigRequest) => hnthFetch(apiUrl("/api/hnth/point-config"), jsonRequest("POST", body)),
   setMonitoring: (body: MonitorRequest) => hnthFetch(apiUrl("/api/hnth/monitor"), jsonRequest("POST", body)),
+  /** Gia hạn lease giám sát; đóng hết trang Operator thì backend tự tắt sau MONITOR_LEASE_SECONDS. */
+  renewMonitorLease: () => hnthFetch(apiUrl("/api/hnth/monitor/lease"), { method: "POST" }),
   selectAgent: (agentId: string) => hnthFetch(apiUrl("/api/hnth/selected-agent"), jsonRequest("POST", { agentId })),
   scan: (body: { scanSubnets: string[]; agentId?: string }) => hnthFetch(apiUrl("/api/hnth/scan"), jsonRequest("POST", body)),
 };
@@ -27,6 +29,7 @@ const agentPath = (agentId: string, suffix = "") => apiUrl(`/api/agents/${encode
 export const agentsApi = {
   list: (init: RequestInit = {}) => hnthFetch(apiUrl("/api/agents"), init),
   update: (agentId: string, body: Record<string, unknown>) => hnthFetch(agentPath(agentId), jsonRequest("PATCH", body)),
+  remove: (agentId: string) => hnthFetch(agentPath(agentId), { method: "DELETE" }),
   setToken: (agentId: string, token: string) => hnthFetch(agentPath(agentId, "/token"), jsonRequest("POST", { token })),
   sendCommand: (agentId: string, body: { type: string } & Record<string, unknown>) => hnthFetch(agentPath(agentId, "/commands"), jsonRequest("POST", body)),
   uploadRelease: (file: File, query: { version?: string; fileName: string }) => {

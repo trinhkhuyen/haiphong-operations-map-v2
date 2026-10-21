@@ -11,6 +11,9 @@ export interface HnthSlice {
   hnthLineStyles: HnthStatusStyles;
   hnthAreaStyles: HnthStatusStyles;
   hnthAreaVisible: boolean;
+  /** Log giám sát và popup Chi tiết hiển thị trong suốt trên bản đồ (phím 8 / switch menu HNTH). Không persist. */
+  hnthTransparentPopups: boolean;
+  setHnthTransparentPopups: (value: boolean) => void;
   updateHnthPoint: (pointId: string, update: Partial<HnthPointOverride>) => void;
   updateHnthPoints: (updates: Record<string, Partial<HnthPointOverride>>) => void;
   setSelectedHnthPointId: (pointId: string | null) => void;
@@ -31,6 +34,7 @@ export const createHnthSlice: AppSlice<HnthSlice> = (set) => ({
   hnthLineStyles: DEFAULT_HNTH_LINE_STYLES,
   hnthAreaStyles: DEFAULT_HNTH_AREA_STYLES,
   hnthAreaVisible: true,
+  hnthTransparentPopups: false,
   updateHnthPoint: (pointId, update) => set((state) => {
     const currentFeature = state.layers.find((layer) => layer.id === HNTH_LAYER_ID)?.data.features.find((item) => String(item.properties?.pointId ?? item.id ?? "") === pointId);
     const current = state.hnthPointOverrides[pointId] ?? {
@@ -118,4 +122,5 @@ export const createHnthSlice: AppSlice<HnthSlice> = (set) => ({
     hnthAreaStyles: { ...state.hnthAreaStyles, [status]: { ...state.hnthAreaStyles[status], ...update } },
   })),
   setHnthAreaVisible: (hnthAreaVisible) => set({ hnthAreaVisible }),
+  setHnthTransparentPopups: (hnthTransparentPopups) => set({ hnthTransparentPopups }),
 });

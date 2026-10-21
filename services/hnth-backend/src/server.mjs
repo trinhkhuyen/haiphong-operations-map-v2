@@ -10,6 +10,7 @@ try {
   const app = createApp(config);
   await migrate();
   await app.auth.seedAdmin();
+  app.realtime.startLeaseSweeper();
   http.createServer(app.handle).listen(config.port, "0.0.0.0", () => console.log(`HNTH Backend listening on :${config.port}`));
 } catch (error) {
   console.error(`HNTH Backend startup failed: ${error.message}`);

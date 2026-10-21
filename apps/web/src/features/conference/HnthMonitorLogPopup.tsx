@@ -9,13 +9,61 @@ import { useHnthLiveStore, type MonitoringInfo } from "../../core/realtime/hnth-
 import type { HnthPointFeature } from "./hnth-types";
 import type { MonitorLogApiEntry, MonitorLogEntry } from "./monitor-log";
 
+// Trạng thái thu nhỏ của popup log lưu riêng (không qua store persist) vì chỉ là tiện ích hiển thị.
+// Chưa lưu lần nào thì mặc định thu nhỏ trên màn hình hẹp.
+const MONITOR_LOG_COLLAPSED_KEY = "hnth-monitor-log-collapsed";
+function readMonitorLogCollapsed() {
+  try {
+    const saved = window.localStorage.getItem(MONITOR_LOG_COLLAPSED_KEY);
+    if (saved !== null) return saved === "1";
+  } catch { /* localStorage bị chặn: dùng mặc định */ }
+  return window.matchMedia("(max-width: 760px)").matches;
+}
+
 export function HnthMonitorLogPopup({ allPoints, onFocusPoint }: { allPoints: HnthPointFeature[]; onFocusPoint: (point: HnthPointFeature) => void }) {
   const updateHnthPoint = useAppStore((state) => state.updateHnthPoint);
   const [continuousMonitoring, setContinuousMonitoring] = useState(false);
   const [monitorConcurrency, setMonitorConcurrency] = useState(2);
   const [monitorLog, setMonitorLog] = useState<MonitorLogEntry[]>([]);
   const [monitorAutoFocus, setMonitorAutoFocus] = useState(true);
-  const [monitorLogCollapsed, setMonitorLogCollapsed] = useState(() => window.matchMedia("(max-width: 760px)").matches);
+  const [monitorLogCollapsed, setMonitorLogCollapsed] = useState(readMonitorLogCollapsed);
+  useEffect(() => {
+    try { window.localStorage.setItem(MONITOR_LOG_COLLAPSED_KEY, monitorLogCollapsed ? "1" : "0"); } catch { /* bỏ qua */ }
+  }, [monitorLogCollapsed]);
+  // Phím 8: lần lẻ chuyển log sang dạng trong suốt hiển thị thẳng trên bản đồ
+  // (không tiêu đề, mờ dần trên/dưới, cao gấp đôi); lần chẵn về dạng popup.
+  // Cờ dùng chung với popup Chi tiết và switch ở cuối menu HNTH.
+  const monitorLogOverlay = useAppStore((state) => state.hnthTransparentPopups);
+  // Ctrl+`: đưa log trong suốt sang mép phải bản đồ và ngược lại (chỉ áp dụng ở chế độ trong suốt).
+  const [overlayOnRight, setOverlayOnRight] = useState(false);
+  // Ctrl+↑ / Ctrl+↓: chữ log trong suốt to gấp 1,5 lần / về cỡ thường.
+  const [overlayLargeText, setOverlayLargeText] = useState(false);
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (!event.ctrlKey) return;
+      if (event.key === "ArrowUp" || event.key === "ArrowDown") {
+        event.preventDefault();
+        setOverlayLargeText(event.key === "ArrowUp");
+        return;
+      }
+      if (event.code !== "Backquote") return;
+      event.preventDefault();
+      setOverlayOnRight((value) => !value);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (event.key !== "8" || target?.isContentEditable || target?.tagName === "INPUT" || target?.tagName === "TEXTAREA" || target?.tagName === "SELECT") return;
+      event.preventDefault();
+      const state = useAppStore.getState();
+      state.setHnthTransparentPopups(!state.hnthTransparentPopups);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
   const monitorLogListRef = useRef<HTMLDivElement | null>(null);
   const monitoringSessionRef = useRef(false);
 
@@ -81,7 +129,7 @@ export function HnthMonitorLogPopup({ allPoints, onFocusPoint }: { allPoints: Hn
     const list = monitorLogListRef.current;
     if (!list) return;
     list.scrollTop = list.scrollHeight;
-  }, [monitorAutoFocus, monitorLog]);
+  }, [monitorAutoFocus, monitorLog, monitorLogOverlay]);
 
   const exportMonitorLog = () => {
     const text = monitorLog.map((item) => `${item.time}\t${item.name}\t${item.ip}\t${item.status}`).join("\n");
@@ -95,9 +143,10 @@ export function HnthMonitorLogPopup({ allPoints, onFocusPoint }: { allPoints: Hn
   };
 
   if (!continuousMonitoring) return null;
-  return <section className={`hnth-monitor-log-popup${monitorLogCollapsed ? " is-collapsed" : ""}`} role="region" aria-label="Log giám sát liên tục">
-    <header><span><RadioTower size={16}/><strong>Log giám sát liên tục</strong><em>{monitorConcurrency} luồng</em></span><span className="hnth-monitor-log-actions"><label><input data-hnth-monitor-autofocus="true" type="checkbox" checked={monitorAutoFocus} onChange={(event) => setMonitorAutoFocus(event.target.checked)}/> AutoFocus</label><button type="button" className="hnth-monitor-log-toggle" onClick={() => setMonitorLogCollapsed((value) => !value)} title={monitorLogCollapsed ? "Mở rộng log" : "Thu nhỏ log"} aria-label={monitorLogCollapsed ? "Mở rộng log" : "Thu nhỏ log"}>{monitorLogCollapsed ? <ChevronUp size={13}/> : <ChevronDown size={13}/>}</button><button type="button" onClick={exportMonitorLog}>Export</button></span></header>
-    {!monitorLogCollapsed && <div data-hnth-monitor-log-list="true" ref={monitorLogListRef} className="hnth-monitor-log-list">
+  const showList = monitorLogOverlay || !monitorLogCollapsed;
+  return <section className={`hnth-monitor-log-popup${monitorLogOverlay ? ` is-overlay${overlayOnRight ? " is-right" : ""}${overlayLargeText ? " is-large" : ""}` : monitorLogCollapsed ? " is-collapsed" : ""}`} role="region" aria-label="Log giám sát liên tục">
+    {!monitorLogOverlay && <header><span><RadioTower size={16}/><strong>Log giám sát liên tục</strong><em>{monitorConcurrency} luồng</em></span><span className="hnth-monitor-log-actions"><label><input data-hnth-monitor-autofocus="true" type="checkbox" checked={monitorAutoFocus} onChange={(event) => setMonitorAutoFocus(event.target.checked)}/> AutoFocus</label><button type="button" className="hnth-monitor-log-toggle" onClick={() => setMonitorLogCollapsed((value) => !value)} title={monitorLogCollapsed ? "Mở rộng log" : "Thu nhỏ log"} aria-label={monitorLogCollapsed ? "Mở rộng log" : "Thu nhỏ log"}>{monitorLogCollapsed ? <ChevronUp size={13}/> : <ChevronDown size={13}/>}</button><button type="button" onClick={exportMonitorLog}>Export</button></span></header>}
+    {showList && <div data-hnth-monitor-log-list="true" ref={monitorLogListRef} className="hnth-monitor-log-list">
       {monitorLog.length === 0 && <small>Đang chờ kết quả từ agent...</small>}
       {monitorLog.map((item, index) => {
         const point = allPoints.find((candidate) => String(candidate.properties?.pointId ?? candidate.id) === item.pointId);

@@ -36,6 +36,8 @@ export type AppEventMap = {
   // Đưa camera về khung tổng quan toàn Thành phố Hải Phòng. Tách khỏi nút Home
   // (có thể đi tới khung địa giới mặc định mà người dùng đã lưu).
   "map:fit-haiphong-overview": undefined;
+  /** Về Home như phím 0 (lần lẻ); `then` chạy khi camera đã tới nơi. */
+  "map:go-home": { then?: () => void };
   // Mở thẻ thông tin cố định và đường viền kiểm tra mà không đổi camera. Dùng
   // chung cho click trên bản đồ và các danh sách nghiệp vụ (Popup Chi tiết HNTH).
   "map:context-info": FixedMapInfo;

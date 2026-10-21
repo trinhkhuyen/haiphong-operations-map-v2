@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { FileText, MonitorUp } from "lucide-react";
+import { MONITOR_LEASE_RENEW_SECONDS } from "@haiphong-ops/hnth-protocol";
 import { useAppStore } from "../../core/store";
 import { agentsApi, hnthApi } from "../../core/api/clients";
 import { emitAppEvent, onAppEvent } from "../../core/events";
@@ -19,7 +20,9 @@ import { useHnthLiveSync } from "./useHnthLiveSync";
 // Tăng/giảm giá trị này nếu muốn điểm được hiển thị gần/xa hơn.
 const HNTH_MENU_POINT_ZOOM = 10.5;
 
-export function HnthPanel({ readOnly = false }: { readOnly?: boolean }) {
+export function HnthPanel({ readOnly = false, canRenewLease = !readOnly }: { readOnly?: boolean; canRenewLease?: boolean }) {
+  const hnthTransparentPopups = useAppStore((state) => state.hnthTransparentPopups);
+  const setHnthTransparentPopups = useAppStore((state) => state.setHnthTransparentPopups);
   const layer = useAppStore((state) => state.layers.find((item) => item.id === HNTH_LAYER_ID));
   const isDataLayerVisible = useAppStore((state) => Boolean(state.layerVisibility[HNTH_LAYER_ID]));
   const toggleLayer = useAppStore((state) => state.toggleLayer);
@@ -222,6 +225,39 @@ export function HnthPanel({ readOnly = false }: { readOnly?: boolean }) {
     return () => { cancelled = true; };
   }, [isDataLayerVisible, points.length, mergeOperationalLayers, hnthPointOverrides]);
 
+  // Ctrl+Enter: bật/tắt Giám sát liên tục giống gạt switch. Chỉ trang có quyền điều khiển
+  // (không readOnly: Guest/Viewer/Trình chiếu không có). Ref giữ hàm mới nhất vì setMonitoring
+  // đọc danh sách điểm/agent hiện tại.
+  const toggleMonitoringRef = useRef<() => void>(() => undefined);
+  toggleMonitoringRef.current = () => {
+    const enabled = !continuousMonitoring;
+    if (enabled) resetHnthStatusesForNewMonitoring();
+    void setMonitoring(enabled).catch(() => undefined);
+  };
+  useEffect(() => {
+    if (readOnly) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Enter" || !event.ctrlKey || event.repeat) return;
+      event.preventDefault();
+      toggleMonitoringRef.current();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [readOnly]);
+
+  // Chỉ Operator/Admin bật/tắt được giám sát; trang của họ còn mở thì giữ lease.
+  // Điều kiện theo vai trò tài khoản, không theo readOnly. Guest/Viewer không gia hạn.
+  // Gia hạn ngay khi bật và khi tab hiện lại (trình duyệt có thể hãm timer của tab ẩn).
+  useEffect(() => {
+    if (!continuousMonitoring || !canRenewLease) return;
+    const renew = () => void hnthApi.renewMonitorLease().catch(() => undefined);
+    renew();
+    const timer = window.setInterval(renew, MONITOR_LEASE_RENEW_SECONDS * 1000);
+    const onVisible = () => { if (document.visibilityState === "visible") renew(); };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => { window.clearInterval(timer); document.removeEventListener("visibilitychange", onVisible); };
+  }, [continuousMonitoring, canRenewLease]);
+
   const { resetMonitoringTracking } = useHnthLiveSync({ points, layer, continuousMonitoring, selectedAgentId, setSelectedAgentId, setLiveAgents, setContinuousMonitoring, setPingConcurrency, setMonitorWaitSeconds });
   const selected = points.find((item) => String(item.properties?.pointId ?? item.id) === selectedId) ?? points[0];
   const selectedPointId = selected ? String(selected.properties?.pointId ?? selected.id) : null;
@@ -421,6 +457,10 @@ export function HnthPanel({ readOnly = false }: { readOnly?: boolean }) {
           <input type="checkbox" checked={hnthAreaVisible} onChange={(event) => setHnthAreaVisible(event.target.checked)} /><i />
         </label>
         {hnthAreaVisible && <HnthStatusStyleEditor title="Màu nền địa giới" styles={hnthAreaStyles} onChange={setHnthAreaStyle} icon="map" />}
+        <label className="outside-mask-toggle hnth-layer-toggle">
+          <span><strong>Popup trong suốt</strong><small>Log và Chi tiết hiển thị thẳng trên bản đồ (phím 8)</small></span>
+          <input type="checkbox" checked={hnthTransparentPopups} onChange={(event) => setHnthTransparentPopups(event.target.checked)} /><i />
+        </label>
 
       </div>
 

@@ -1,5 +1,5 @@
 // Camera: Home, tổng quan Hải Phòng, khung nhìn mặc định khi mở trang, phím tắt, tìm địa điểm.
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import maplibregl from "maplibre-gl";
 import { bbox } from "@turf/turf";
 import { useAppStore } from "../../../core/store";
@@ -7,6 +7,22 @@ import { unitsToFeatureCollection } from "../../administrative/data-provider";
 import { onAppEvent } from "../../../core/events";
 import { HOME_CITY_TRANSITION_DURATION_MS, HOME_CITY_PAUSE_MS, REGIONAL_OPERATIONAL_BOUNDS, setMobileHomePanBounds, MOBILE_HOME_ZOOM_OUT_LEVELS, MOBILE_HOME_PAN_DOWN_PX, fitMobileHomeOverview, getHaiphongOverviewBounds, HAIPHONG_OVERVIEW_PADDING, HAIPHONG_MOBILE_OVERVIEW_PADDING, getHaiphongOverviewPadding, fitHaiphongOverview } from "../lib/viewport";
 import type { MapScope } from "./useMapScope";
+
+// Phím 7: tốc độ quay vòng camera (độ/giây). 3°/s = một vòng 360° mất 2 phút.
+// Bấm 7 lần lẻ quay -ORBIT (bản đồ xoay thuận chiều kim đồng hồ trên màn hình),
+// lần chẵn quay +ORBIT (ngược lại). Tăng số này để quay nhanh hơn, giảm để chậm hơn.
+export const ORBIT_DEGREES_PER_SECOND = 3;
+
+// Phím 0/1 bấm chẵn lần: về góc camera do người dùng lưu bằng Shift+0/Shift+1 (lưu theo trình duyệt).
+type PresetDigit = "0" | "1";
+const cameraPresetKey = (digit: PresetDigit) => `hnth-camera-preset-${digit}`;
+type CameraPreset = { center: [number, number]; zoom: number; pitch: number; bearing: number };
+function readCameraPreset(digit: PresetDigit): CameraPreset | null {
+  try {
+    const value = JSON.parse(window.localStorage.getItem(cameraPresetKey(digit)) || "null") as CameraPreset | null;
+    return value && Array.isArray(value.center) && Number.isFinite(value.zoom) ? value : null;
+  } catch { return null; }
+}
 
 export function useMapCamera(context: MapScope) {
   const { mapRef, drawSearchMarkerRef, hasSetInitialViewportRef, homeTransitionTimeoutRef, isHomeTransitionActiveRef, isMapReady, isInitialRegionalMapReady } = context;
@@ -111,18 +127,133 @@ export function useMapCamera(context: MapScope) {
     return onAppEvent("map:fit-haiphong-overview", fitCityOverview);
   }, []);
 
+  // Quay camera liên tục quanh tâm bản đồ.
+  // Dừng khi người dùng kéo/cuộn/chạm bản đồ hoặc bấm phím 0/Home/1; bấm lại 7 chỉ đổi chiều.
+  const orbitFrameRef = useRef<number | null>(null);
+  const orbitStartTimeoutRef = useRef<number | null>(null);
+  const orbitDirectionRef = useRef(-1);
+  const orbitPressCountRef = useRef(0);
+  const homeTiltedPressCountRef = useRef(0);
+  const homePressCountRef = useRef(0);
+  // Chẵn/lẻ chỉ tính cho các lần bấm liên tiếp cùng một phím: bấm phím khác xen giữa thì đếm lại từ 1.
+  const lastShortcutKeyRef = useRef("");
+  const stopOrbit = useCallback(() => {
+    if (orbitStartTimeoutRef.current !== null) window.clearTimeout(orbitStartTimeoutRef.current);
+    if (orbitFrameRef.current !== null) window.cancelAnimationFrame(orbitFrameRef.current);
+    orbitStartTimeoutRef.current = null;
+    orbitFrameRef.current = null;
+  }, []);
+  const startOrbit = useCallback(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    stopOrbit();
+    goHomeTilted();
+    // Đợi camera về góc phím 1 xong mới bắt đầu quay, tránh giật với easeTo đang chạy.
+    orbitStartTimeoutRef.current = window.setTimeout(() => {
+      orbitStartTimeoutRef.current = null;
+      let last = performance.now();
+      const step = (now: number) => {
+        if (mapRef.current !== map) return;
+        map.setBearing((map.getBearing() + orbitDirectionRef.current * ORBIT_DEGREES_PER_SECOND * (now - last) / 1000) % 360);
+        last = now;
+        orbitFrameRef.current = window.requestAnimationFrame(step);
+      };
+      orbitFrameRef.current = window.requestAnimationFrame(step);
+    }, HOME_CITY_TRANSITION_DURATION_MS + 100);
+  }, [goHomeTilted, stopOrbit]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!isMapReady || !map) return;
+    const canvas = map.getCanvasContainer();
+    const interactions = ["mousedown", "wheel", "touchstart"] as const;
+    for (const name of interactions) canvas.addEventListener(name, stopOrbit, { passive: true });
+    return () => { for (const name of interactions) canvas.removeEventListener(name, stopOrbit); stopOrbit(); };
+  }, [isMapReady, stopOrbit]);
+
+  const easeToPreset = (preset: CameraPreset) => {
+    const map = mapRef.current;
+    if (!map) return;
+    map.stop();
+    map.setMaxBounds(null);
+    map.easeTo({ ...preset, duration: HOME_CITY_TRANSITION_DURATION_MS });
+  };
+
+  // Góc camera (zoom/nghiêng/xoay) ghi lại mỗi lần Home chạy xong, để biết camera có đang ở mức Home không.
+  const homeCameraRef = useRef<{ zoom: number; pitch: number; bearing: number } | null>(null);
+  const isAtHomeCamera = () => {
+    const map = mapRef.current;
+    const state = useAppStore.getState();
+    const home = homeCameraRef.current ?? (state.defaultViewportEnabled && state.defaultViewport ? state.defaultViewport : null);
+    if (!map || !home) return false;
+    const bearingDiff = Math.abs(((map.getBearing() - (home.bearing ?? 0)) % 360 + 540) % 360 - 180);
+    return Math.abs(map.getZoom() - home.zoom) < 0.05 && Math.abs(map.getPitch() - (home.pitch ?? 0)) < 1 && bearingDiff < 1;
+  };
+
+  // Về Home rồi ghi lại zoom/góc khi tới nơi; `then` chạy sau khi camera dừng.
+  const goHomeAndRecord = (then?: () => void) => {
+    goHome();
+    // Home có thể gồm 2 chặng (toàn TP -> dừng -> khung mặc định); chờ hết chặng cuối.
+    const delay = homeTransitionTimeoutRef.current !== null ? HOME_CITY_TRANSITION_DURATION_MS * 2 + HOME_CITY_PAUSE_MS : HOME_CITY_TRANSITION_DURATION_MS;
+    window.setTimeout(() => {
+      const map = mapRef.current;
+      if (map) homeCameraRef.current = { zoom: map.getZoom(), pitch: map.getPitch(), bearing: map.getBearing() };
+      then?.();
+    }, delay + 100);
+  };
+
+  useEffect(() => onAppEvent("map:go-home", (detail) => {
+    stopOrbit();
+    // Đã ở mức zoom/góc của Home (chỉ khác tâm, vd vừa focus điểm khác) thì không quay về Home nữa.
+    if (isAtHomeCamera()) { detail?.then?.(); return; }
+    goHomeAndRecord(detail?.then);
+  }), [goHome, stopOrbit]);
+
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null;
       if (target?.isContentEditable || target?.tagName === "INPUT" || target?.tagName === "TEXTAREA" || target?.tagName === "SELECT") return;
-      if (event.key === "Home" || event.key === "0") {
+      if (event.key !== lastShortcutKeyRef.current) {
+        orbitPressCountRef.current = 0;
+        homeTiltedPressCountRef.current = 0;
+        homePressCountRef.current = 0;
+      }
+      lastShortcutKeyRef.current = event.key;
+      if (event.key === "7") {
         event.preventDefault();
-        goHome();
+        orbitPressCountRef.current += 1;
+        orbitDirectionRef.current = orbitPressCountRef.current % 2 === 1 ? -1 : 1;
+        // Đang quay thì chỉ đổi chiều tại chỗ; chưa quay thì về góc phím 1 rồi mới quay.
+        if (orbitFrameRef.current === null && orbitStartTimeoutRef.current === null) startOrbit();
         return;
       }
-      if (event.key === "2" || event.key === "3") {
+      // Shift+0/Shift+1 ở hàng số; ở bàn phím số khi bật NumLock, Windows gửi Shift+số thành
+      // phím điều hướng ("Insert"/"End") nhưng code vẫn là Numpad0/Numpad1.
+      const saveDigit = (["0", "1"] as const).find((digit) => (event.code === `Digit${digit}` && event.shiftKey) || (event.code === `Numpad${digit}` && event.key !== digit));
+      if (saveDigit) {
         event.preventDefault();
-        useAppStore.getState().setBaseMapMode(event.key === "2" ? "satellite" : "standard");
+        const map = mapRef.current;
+        if (!map) return;
+        const center = map.getCenter();
+        const preset: CameraPreset = { center: [Number(center.lng.toFixed(6)), Number(center.lat.toFixed(6))], zoom: Number(map.getZoom().toFixed(2)), pitch: Number(map.getPitch().toFixed(1)), bearing: Number(map.getBearing().toFixed(1)) };
+        try { window.localStorage.setItem(cameraPresetKey(saveDigit), JSON.stringify(preset)); } catch { /* localStorage bị chặn */ }
+        window.alert(`Đã lưu góc nhìn cho phím ${saveDigit} (bấm chẵn lần):
+Tâm ${preset.center[1]}, ${preset.center[0]} · zoom ${preset.zoom} · nghiêng ${preset.pitch}° · xoay ${preset.bearing}°`);
+        return;
+      }
+      if (event.key === "Home" || event.key === "0" || event.key === "1") stopOrbit();
+      if (event.key === "Home" || event.key === "0") {
+        event.preventDefault();
+        // Home luôn về toàn cảnh; riêng phím 0 bấm chẵn lần liên tiếp thì về góc lưu bằng Shift+0.
+        const preset = event.key === "0" && ++homePressCountRef.current % 2 === 0 ? readCameraPreset("0") : null;
+        if (preset) easeToPreset(preset);
+        else goHomeAndRecord();
+        return;
+      }
+      if (event.key === "2") {
+        event.preventDefault();
+        const state = useAppStore.getState();
+        state.setBaseMapMode(state.baseMapMode === "satellite" ? "standard" : "satellite");
         return;
       }
       if (event.key === "4" || event.key === "5" || event.key === "6") {
@@ -135,12 +266,16 @@ export function useMapCamera(context: MapScope) {
       }
       if (event.key === "1") {
         event.preventDefault();
-        goHomeTilted();
+        homeTiltedPressCountRef.current += 1;
+        const preset = homeTiltedPressCountRef.current % 2 === 0 ? readCameraPreset("1") : null;
+        // Chưa lưu góc nào bằng Shift+1 thì lần chẵn vẫn dùng góc nghiêng mặc định.
+        if (preset) easeToPreset(preset);
+        else goHomeTilted();
       }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [goHome, goHomeTilted]);
+  }, [goHome, goHomeTilted, startOrbit, stopOrbit]);
 
   useEffect(() => {
     const map = mapRef.current;

@@ -1,5 +1,6 @@
 // Chức năng HNTH: live-view công khai (Guest, Trình chiếu) và điều khiển giám sát (Operator).
 import { isIP } from "node:net";
+import { MONITOR_LEASE_SECONDS } from "@haiphong-ops/hnth-protocol";
 import { pool } from "../db.mjs";
 import { requireRole } from "../auth.mjs";
 import { AGENT_SUMMARY_COLUMNS, withLiveStatus } from "../services/realtime.mjs";
@@ -93,6 +94,14 @@ export function registerHnthRoutes(router, { realtime }) {
     return reply(200, { agentId });
   });
 
+  // Giao diện Operator đang mở gia hạn lease mỗi MONITOR_LEASE_RENEW_SECONDS. Không gia hạn
+  // phiên đã tắt/hết hạn (renewed=false) để đóng hết cửa sổ thì giám sát dừng thật.
+  router.add("POST", "/api/hnth/monitor/lease", async ({ user, reply }) => {
+    if (!requireRole(user, "operator")) return reply(403, { error: "forbidden" });
+    const result = await pool.query("UPDATE monitor_state SET lease_expires_at=now() + make_interval(secs => $1) WHERE id=1 AND enabled AND (lease_expires_at IS NULL OR lease_expires_at >= now()) RETURNING lease_expires_at AS \"leaseExpiresAt\"", [MONITOR_LEASE_SECONDS]);
+    return reply(200, { renewed: result.rowCount > 0, leaseExpiresAt: result.rows[0]?.leaseExpiresAt ?? null });
+  });
+
   router.add("POST", "/api/hnth/monitor", async ({ user, readBody, reply }) => {
     if (!requireRole(user, "operator")) return reply(403, { error: "forbidden" });
     const body = await readBody();
@@ -122,9 +131,9 @@ export function registerHnthRoutes(router, { realtime }) {
     const targetAgentId = String(body.agentId || (await realtime.selectedAgentId()));
     if (!(await agentExists(targetAgentId))) return reply(404, { error: "agent not found" });
     if (startingNewSession) {
-      await pool.query("UPDATE monitor_state SET enabled=true,agent_id=$1,concurrency=$2,wait_seconds=$3,session_id=gen_random_uuid(),started_at=now(),updated_at=now(),revision=revision+1 WHERE id=1", [targetAgentId, concurrency, waitSeconds]);
+      await pool.query("UPDATE monitor_state SET enabled=true,agent_id=$1,concurrency=$2,wait_seconds=$3,session_id=gen_random_uuid(),started_at=now(),lease_expires_at=now() + make_interval(secs => $4),updated_at=now(),revision=revision+1 WHERE id=1", [targetAgentId, concurrency, waitSeconds, MONITOR_LEASE_SECONDS]);
     } else {
-      await pool.query("UPDATE monitor_state SET enabled=$1,agent_id=$2,concurrency=$3,wait_seconds=$4,started_at=CASE WHEN $1 THEN COALESCE(started_at,now()) ELSE NULL END,updated_at=now(),revision=revision+1 WHERE id=1", [Boolean(body.enabled), targetAgentId, concurrency, waitSeconds]);
+      await pool.query("UPDATE monitor_state SET enabled=$1,agent_id=$2,concurrency=$3,wait_seconds=$4,started_at=CASE WHEN $1 THEN COALESCE(started_at,now()) ELSE NULL END,lease_expires_at=CASE WHEN $1 THEN now() + make_interval(secs => $5) ELSE NULL END,updated_at=now(),revision=revision+1 WHERE id=1", [Boolean(body.enabled), targetAgentId, concurrency, waitSeconds, MONITOR_LEASE_SECONDS]);
     }
     await pool.query("UPDATE commands SET status='superseded' WHERE agent_id=$1 AND status='pending' AND type IN ('monitor-start','monitor-stop')", [targetAgentId]);
     await pool.query("INSERT INTO commands(agent_id,type,payload) VALUES($1,$2,$3)", [targetAgentId, body.enabled ? "monitor-start" : "monitor-stop", JSON.stringify({ points: points.map((point) => ({ pointId: point.point_id, name: point.name, ipAddress: point.ip_address, modelVendor: point.model_vendor })), concurrency, waitSeconds, resetStatuses: startingNewSession })]);

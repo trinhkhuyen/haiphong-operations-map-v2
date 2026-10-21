@@ -6,6 +6,8 @@ directories:
 files:
   - desktop/main.cjs
   - desktop/hnth-agent.png
+  - desktop/hnth-agent-busy.png
+  - desktop/hnth-agent-offline.png
   - package.json
 extraResources:
   - from: src

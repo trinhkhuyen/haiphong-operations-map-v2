@@ -1,5 +1,6 @@
 import { ping } from "./probes/ping.mjs";
 import { discoverHosts } from "./probes/scan.mjs";
+import { getAgentState, setAgentState } from "./status.mjs";
 import { collectSnmp } from "./probes/snmp.mjs";
 
 /** Gửi kết quả đo lên backend: điểm cấu hình sẵn, SNMP, quét LAN. */
@@ -23,7 +24,10 @@ export function createTelemetry({ config, client, monitor }) {
   }
 
   async function reportLocalNetwork(scanSubnets = config.scanSubnets || []) {
-    const ips = await discoverHosts(scanSubnets, config);
+    // Đếm số lượt quét đang chạy (lệnh và lịch quét có thể chồng nhau) để tray hiện màu "đang chạy".
+    setAgentState({ scanning: getAgentState().scanning + 1 });
+    let ips;
+    try { ips = await discoverHosts(scanSubnets, config); } finally { setAgentState({ scanning: getAgentState().scanning - 1 }); }
     const response = await client.postJson(client.discoveredIpsUrl(), { agentId: config.agentId, ips });
     if (!response.ok) throw new Error(`Relay scan upload returned ${response.status}`);
     console.log(`uploaded ${ips.length} discovered LAN IPs to relay at ${new Date().toISOString()}`);

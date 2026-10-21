@@ -24,5 +24,7 @@ export function applyAgentConfig(config, command) {
   const heartbeatSeconds = Math.max(5, Math.min(30, Number(command.heartbeatSeconds) || 30));
   for (const key of AGENT_CONFIG_KEYS) if (command[key] !== undefined) config[key] = command[key];
   if (command.token) config.token = String(command.token);
+  // Tên đổi trên giao diện: lưu lại để tray hiển thị và register lúc khởi động không ghi đè bằng tên cũ.
+  if (command.agentName) config.agentName = String(command.agentName);
   return { heartbeatSeconds, tokenChanged: Boolean(command.token) };
 }

@@ -19,3 +19,28 @@
 .hnth-monitor-log-row { width:100%; border:0; border-bottom:1px solid #15303a; background:transparent; color:inherit; text-align:left; cursor:pointer; }.hnth-monitor-log-row:hover { background:#0d2933; }.hnth-point-log-popup { position:absolute; left:22px; bottom:calc(22px + 240px + 12px); width:330px; height:300px; max-width:calc(100vw - 36px); z-index:23; display:flex; flex-direction:column; overflow:hidden; border:1px solid #2b7382; border-radius:10px; background:#081923f5; box-shadow:0 16px 40px #000a; }.hnth-point-log-popup > header { display:flex; align-items:center; justify-content:space-between; padding:9px 11px; border-bottom:1px solid #21404a; color:#67e8f9; font-size:9px; }.hnth-point-log-popup > header span { display:flex; align-items:center; gap:6px; }.hnth-point-log-popup > header button { display:grid; place-items:center; width:26px; height:26px; border:0; border-radius:5px; background:#143541; color:#9fc1ca; cursor:pointer; }.hnth-point-log-title { display:grid; gap:3px; padding:10px 11px; border-bottom:1px solid #15303a; }.hnth-point-log-title strong { color:#e7f7fa; font-size:9px; }.hnth-point-log-title small { color:#78949d; font:7px "IBM Plex Mono"; }.hnth-point-log-list { flex:1; min-height:0; overflow:auto; padding:5px; }.hnth-point-log-list > small { display:block; padding:10px; color:#78949d; font-size:8px; }
 
 .hnth-import-export { display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:2px; }.hnth-import-export button { height:30px;display:flex;align-items:center;justify-content:center;gap:5px;border:1px solid #285463;border-radius:7px;background:#09232d;color:#8dddea;font-size:8px;font-weight:600;cursor:pointer; }.hnth-import-export button:hover { border-color:#67e8f9;color:#e8fbff;background:#0d3138; }
+/* Popup trong suốt (phím 8 / switch menu HNTH). Log: thẳng trên bản đồ, cao gấp đôi popup (240px),
+   chỉ mờ dần ở trên để dòng cuối (AutoFocus) luôn rõ; đáy đặt đúng đỉnh popup thường (22px + 240px). */
+.hnth-monitor-log-popup.is-overlay { bottom:calc(22px + 240px); height:480px; max-height:calc(100% - 22px - 240px - 22px); resize:none; border:0; background:transparent; box-shadow:none; pointer-events:none; -webkit-mask-image:linear-gradient(to bottom,transparent 0,#000 30%); mask-image:linear-gradient(to bottom,transparent 0,#000 30%); }
+.hnth-monitor-log-popup.is-overlay .hnth-monitor-log-list { scrollbar-width:none; pointer-events:auto; }
+.hnth-monitor-log-popup.is-overlay .hnth-monitor-log-row { border-bottom-color:transparent; text-shadow:0 1px 3px #000c; }
+.hnth-monitor-log-popup.is-overlay .hnth-monitor-log-row:hover { background:#0d293399; }
+/* Popup Chi tiết trạng thái: bỏ nền/viền/bóng, không mờ dần. */
+.hnth-status-detail-popup.is-overlay { border-color:transparent; background:transparent; box-shadow:none; backdrop-filter:none; }
+.hnth-status-detail-popup.is-overlay > header, .hnth-status-detail-popup.is-overlay .hnth-alert-summary, .hnth-status-detail-popup.is-overlay .hnth-alert-list button { border-color:transparent; background:transparent; text-shadow:0 1px 3px #000c; }
+.hnth-status-detail-popup.is-overlay .hnth-alert-list button:hover { background:#0d293399; }
+@media (max-width: 760px) { .hnth-monitor-log-popup.is-overlay { bottom:calc(12px + 240px); max-height:calc(100% - 12px - 240px - 12px); } }
+/* Ctrl+`: log trong suốt nằm mép phải bản đồ. */
+/* Bên phải: đối xứng theo phần CHỮ, không theo khung. Bên trái chữ bắt đầu cách mép trái
+   22px lề + 5px đệm list + 6px đệm dòng + 7px chấm + 7px khoảng cách = 47px. Bên phải khung co
+   theo dòng dài nhất (chữ kết thúc trước mép khung 5px + 6px = 11px), nên right = 47 - 11 = 36px.
+   Điện thoại: lề 12px -> 37px chữ -> right 26px. */
+.hnth-monitor-log-popup.is-overlay.is-right { left:auto; right:36px; width:max-content; max-width:calc(100% - 72px); }
+@media (max-width: 760px) { .hnth-monitor-log-popup.is-overlay.is-right { right:26px; max-width:calc(100% - 52px); } }
+/* contain:strict (size containment) làm danh sách có bề rộng nội tại 0, khung max-content co về 0. */
+.hnth-monitor-log-popup.is-overlay.is-right .hnth-monitor-log-list { contain:layout paint; }
+/* Ctrl+↑: chữ log trong suốt to gấp 1,5 lần (8px -> 12px, 7px -> 10.5px); Ctrl+↓ về như cũ. */
+.hnth-monitor-log-popup.is-overlay.is-large .hnth-monitor-log-row strong { font-size:12px; }
+.hnth-monitor-log-popup.is-overlay.is-large .hnth-monitor-log-row small,
+.hnth-monitor-log-popup.is-overlay.is-large .hnth-monitor-log-list > small { font-size:10.5px; }
+.hnth-monitor-log-popup.is-overlay.is-large .hnth-monitor-log-row i { width:10px; height:10px; }

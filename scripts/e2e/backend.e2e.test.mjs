@@ -207,6 +207,33 @@ describe("hnth-backend e2e", { skip: skipReason }, () => {
     assert.equal(failed.status, 500);
     assert.deepEqual(failed.body, { error: "internal error" });
 
-    assert.deepEqual((await db.query("SELECT version,name FROM schema_migrations ORDER BY version")).rows, [{ version: 1, name: "baseline" }]);
+    assert.deepEqual((await db.query("SELECT version,name FROM schema_migrations ORDER BY version")).rows, [{ version: 1, name: "baseline" }, { version: 2, name: "monitor-lease" }]);
+  });
+
+  it("10. xóa agent: từ chối khi online, xóa khi offline", async () => {
+    await db.query("INSERT INTO agents(agent_id,name,token_hash,status,last_seen_at) VALUES('agent-del','Xóa','x',$1,now()) ON CONFLICT(agent_id) DO UPDATE SET last_seen_at=now()", ["online"]);
+    await db.query("INSERT INTO commands(agent_id,type,payload) VALUES('agent-del','test-point','{}')");
+    assert.equal((await api("DELETE", "/api/agents/agent-del")).status, 401);
+    assert.equal((await api("DELETE", "/api/agents/agent-del", { token: adminToken })).status, 409, "agent online");
+    await db.query("UPDATE agents SET last_seen_at=now() - interval '1 hour' WHERE agent_id='agent-del'");
+    assert.equal((await api("DELETE", "/api/agents/agent-del", { token: adminToken })).status, 200);
+    assert.equal((await db.query("SELECT 1 FROM agents WHERE agent_id='agent-del'")).rowCount, 0);
+    assert.equal((await commands("agent-del", "test-point")).length, 0);
+    assert.equal((await api("DELETE", "/api/agents/agent-del", { token: adminToken })).status, 404);
+  });
+
+  it("11. lease giám sát: gia hạn khi đang bật, hết hạn thì backend tắt cờ và gửi monitor-stop", async () => {
+    const points = [{ pointId: "hnth-e2e-lease", name: "Lease", ipAddress: "127.0.0.1" }];
+    assert.equal((await api("POST", "/api/hnth/monitor", { token: adminToken, body: { enabled: true, agentId: "agent-a", concurrency: 1, waitSeconds: 1, points } })).status, 202);
+    assert.ok((await monitorState()).monitoring.leaseExpiresAt, "bật giám sát cấp lease");
+    const agentA = agents[0];
+    await waitFor(() => agentA.output().split("continuous monitoring started").length > 2, { message: "agent A bắt đầu phiên mới" });
+    const renewed = await api("POST", "/api/hnth/monitor/lease", { token: adminToken });
+    assert.equal(renewed.body.renewed, true);
+    assert.equal((await api("POST", "/api/hnth/monitor/lease")).status, 401);
+    await db.query("UPDATE monitor_state SET lease_expires_at=now() - interval '1 second' WHERE id=1");
+    assert.equal((await monitorState()).monitoring.enabled, false, "đọc trạng thái thì lease hết hạn bị tắt");
+    assert.equal((await api("POST", "/api/hnth/monitor/lease", { token: adminToken })).body.renewed, false, "không gia hạn phiên đã tắt");
+    await waitFor(() => agentA.output().includes("monitoring lease expired"), { message: "agent A dừng vì hết lease" });
   });
 });

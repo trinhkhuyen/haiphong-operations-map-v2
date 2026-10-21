@@ -5,6 +5,15 @@
 /** Trạng thái agent đo được (ping): agent gửi, backend lưu. */
 export const AGENT_STATUSES = Object.freeze(["online", "offline", "unknown"]);
 
+/**
+ * Lease giám sát liên tục: phiên giám sát chỉ sống khi còn giao diện Operator
+ * đang mở gia hạn định kỳ. Hết hạn thì backend tắt cờ và gửi monitor-stop.
+ */
+export const MONITOR_LEASE_SECONDS = 120;
+export const MONITOR_LEASE_RENEW_SECONDS = 30;
+/** Agent tự dừng giám sát khi không liên lạc được backend quá ngần này giây. */
+export const AGENT_BACKEND_LOSS_STOP_SECONDS = 60;
+
 /** Trạng thái hiển thị trên bản đồ HNTH (frontend). */
 export const CONNECTION_STATUSES = Object.freeze(["unknown", "unconnected", "connected", "lost"]);
 

@@ -5,7 +5,7 @@ import path from "node:path";
 import { createBackendClient } from "../src/backend-client.mjs";
 import { applyAgentConfig } from "../src/config.mjs";
 import { installationIdFor, isCopiedInstallation } from "../src/identity.mjs";
-import { orderCyclePoints, resultsToSend } from "../src/monitor.mjs";
+import { createMonitor, orderCyclePoints, resultsToSend } from "../src/monitor.mjs";
 import { isPingTarget, pingArgs, pingHost, summarizeSamples } from "../src/probes/ping.mjs";
 import { expandSubnet, vendorFromMac } from "../src/probes/scan.mjs";
 import { ber, berInteger, berOid, collectBer, parseSnmpResponse, snmpPacket } from "../src/probes/snmp.mjs";
@@ -91,6 +91,22 @@ describe("monitor", () => {
     const lastSent = new Map([["a", "online"], ["b", "online"], ["hnth-hub", "online"]]);
     assert.deepEqual(resultsToSend(results, lastSent, false).map((item) => item.pointId), ["b", "hnth-hub"]);
     assert.equal(resultsToSend(results, lastSent, true), results);
+  });
+  it("upload lỗi không làm chết vòng; mất backend quá ngưỡng thì tự dừng", async () => {
+    let since = 0;
+    let uploads = 0;
+    const client = { telemetryUrl: "http://backend.invalid", msSinceContact: () => since, postJson: async () => { uploads += 1; throw new Error("ECONNREFUSED"); } };
+    const monitor = createMonitor({ config: { agentId: "t", probeCount: 1 }, client, backendLossStopMs: 1000 });
+    monitor.start({ points: [{ pointId: "p1", ipAddress: "" }], waitSeconds: 1 });
+    await new Promise((resolve) => setTimeout(resolve, 1300));
+    assert.ok(uploads >= 2, "vòng vẫn chạy tiếp sau upload lỗi");
+    assert.equal(monitor.isActive(), true);
+    since = 5000;
+    await new Promise((resolve) => setTimeout(resolve, 1300));
+    assert.equal(monitor.isActive(), false, "tự dừng khi mất backend");
+    const after = uploads;
+    await new Promise((resolve) => setTimeout(resolve, 1300));
+    assert.equal(uploads, after, "đã dừng hẳn, không ping/gửi ngầm");
   });
 });
 

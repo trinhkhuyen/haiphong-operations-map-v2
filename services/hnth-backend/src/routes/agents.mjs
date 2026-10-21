@@ -5,7 +5,7 @@ import { mkdir, rename, unlink } from "node:fs/promises";
 import { OPERATOR_COMMAND_TYPES } from "@haiphong-ops/hnth-protocol";
 import { pool } from "../db.mjs";
 import { requireRole } from "../auth.mjs";
-import { withLiveStatus } from "../services/realtime.mjs";
+import { isAgentOnline, withLiveStatus } from "../services/realtime.mjs";
 import { readExeFileVersion, safeReleaseFileName, safeReleaseVersion, writeRelease } from "../services/releases.mjs";
 
 const enqueue = (agentId, type, payload) => pool.query("INSERT INTO commands(agent_id,type,payload) VALUES($1,$2,$3)", [agentId, type, typeof payload === "string" ? payload : JSON.stringify(payload)]);
@@ -28,8 +28,27 @@ export function registerAgentRoutes(router, { config }) {
     const newToken = String(body.token || "").trim();
     const result = await pool.query("UPDATE agents SET name=$1,heartbeat_seconds=$2,monitor_config=$3 WHERE agent_id=$4 RETURNING agent_id AS \"agentId\",name,status,last_seen_at AS \"lastSeenAt\",version,heartbeat_seconds AS \"heartbeatSeconds\",monitor_config AS \"monitorConfig\"", [name, heartbeatSeconds, JSON.stringify(monitorConfig), params.agentId]);
     if (!result.rowCount) return reply(404, { error: "agent not found" });
-    await enqueue(params.agentId, "agent-config", { heartbeatSeconds, ...monitorConfig, ...(newToken ? { token: newToken } : {}) });
+    await enqueue(params.agentId, "agent-config", { heartbeatSeconds, ...monitorConfig, agentName: name, ...(newToken ? { token: newToken } : {}) });
     return reply(200, result.rows[0]);
+  });
+
+  // Xóa Agent khỏi danh sách. Chỉ cho xóa Agent đang offline: Agent còn chạy sẽ
+  // tự register lại ở heartbeat kế tiếp nên xóa lúc online không có tác dụng.
+  // monitor_logs giữ lại làm lịch sử; lệnh chờ, IP quét được, SNMP và lịch sử cập nhật bị xóa theo.
+  router.add("DELETE", "/api/agents/:agentId", async ({ user, params, reply }) => {
+    if (!requireRole(user, "admin")) return reply(403, { error: "forbidden" });
+    const found = await pool.query("SELECT last_seen_at AS \"lastSeenAt\" FROM agents WHERE agent_id=$1", [params.agentId]);
+    if (!found.rowCount) return reply(404, { error: "agent not found" });
+    if (isAgentOnline(found.rows[0].lastSeenAt)) return reply(409, { error: "Agent đang online; hãy tắt Agent trên máy trước khi xóa." });
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      for (const table of ["commands", "discovered_ips", "snmp_results", "agent_update_events"]) await client.query(`DELETE FROM ${table} WHERE agent_id=$1`, [params.agentId]);
+      await client.query("DELETE FROM agents WHERE agent_id=$1", [params.agentId]);
+      await client.query("COMMIT");
+    } catch (error) { await client.query("ROLLBACK").catch(() => {}); throw error; }
+    finally { client.release(); }
+    return reply(200, { deleted: true, agentId: params.agentId });
   });
 
   router.add("POST", "/api/agents/:agentId/token", async ({ user, params, readBody, reply }) => {

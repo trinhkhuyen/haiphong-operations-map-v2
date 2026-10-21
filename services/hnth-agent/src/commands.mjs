@@ -15,7 +15,7 @@ export function createCommandHandler({ config, configPath, client, persistConfig
     if (command.type === "test-point") await telemetry.reportTestPoint(command);
     if (command.type === "point-config") await monitor.configurePoint(command);
     if (command.type === "monitor-start") monitor.start(command);
-    if (command.type === "monitor-stop") monitor.stop();
+    if (command.type === "monitor-stop") monitor.stop(command.reason === "lease-expired" ? "monitoring lease expired (no operator page renewed it)" : "");
   }
 
   async function poll() {

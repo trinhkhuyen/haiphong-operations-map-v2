@@ -8,6 +8,7 @@ import { HNTH_LAYER_ID, HNTH_STATUS_LABELS, normalizeHnthStatus, type HnthConnec
 import { HnthDisconnectConfirmButton } from "./HnthDisconnectConfirmButton";
 import { HnthMonitorLogPopup } from "./HnthMonitorLogPopup";
 import { HnthPointLogPopup, useHnthPointLog } from "./HnthPointLogPopup";
+import { focusHnthPoint } from "./hnth-focus";
 import type { HnthPointFeature } from "./hnth-types";
 
 const cards: Array<{ status: HnthConnectionStatus; label: string; icon: typeof Cable }> = [
@@ -18,6 +19,7 @@ const cards: Array<{ status: HnthConnectionStatus; label: string; icon: typeof C
 ];
 
 export function HnthStatusMetrics() {
+  const transparentPopups = useAppStore((state) => state.hnthTransparentPopups);
   const layer = useAppStore((state) => state.layers.find((item) => item.id === HNTH_LAYER_ID));
   const administrativeUnits = useAppStore((state) => state.administrativeUnits);
   const setSelectedHnthPointId = useAppStore((state) => state.setSelectedHnthPointId);
@@ -104,14 +106,7 @@ export function HnthStatusMetrics() {
     });
   }, []);
 
-  const focusPoint = (item: HnthPointFeature) => {
-    const pointId = String(item.properties?.pointId ?? item.id);
-    const wardCode = String(item.properties?.wardCode ?? "");
-    const administrativeId = administrativeUnits.find((unit) => String(unit.wardCode ?? "") === wardCode)?.id;
-    setSelectedHnthPointId(pointId);
-    emitAppEvent("hnth:focus", { coordinates: item.geometry.coordinates as [number, number], preserveZoom: true, administrativeId, boundaryWidthMultiplier: 2 });
-    emitAppEvent("map:context-info", { kind: "hnth", pointId, administrativeId, pulseBoundary: true });
-  };
+  const focusPoint = focusHnthPoint;
 
   useEffect(() => {
     if (!autoPingEnabled) return;
@@ -197,7 +192,7 @@ export function HnthStatusMetrics() {
 
     {/* Popup Chi tiết trạng thái HNTH: bảng cố định bên phải, ngay dưới Thanh trạng thái HNTH. */}
     {detailStatus && <section
-      className="hnth-status-detail-popup"
+      className={`hnth-status-detail-popup${transparentPopups ? " is-overlay" : ""}`}
       role="region"
       aria-label={`Popup Chi tiết trạng thái HNTH: ${HNTH_STATUS_LABELS[detailStatus]}`}
     >

@@ -12,6 +12,7 @@ import { useAuth } from "../features/auth/useAuth";
 import { GlobalSearch } from "./GlobalSearch";
 import { PanelErrorBoundary } from "./PanelErrorBoundary";
 import { SystemStatusBar } from "./SystemStatusBar";
+import { MapTitleClock } from "./MapTitleClock";
 import { useOperationalLayerLoader } from "./useOperationalLayerLoader";
 
 // Các panel không mở mặc định được tải khi mở lần đầu (HnthPanel luôn mount nên
@@ -82,6 +83,18 @@ export function App() {
     return () => window.cancelAnimationFrame(frameId);
   }, [isSidebarCollapsed]);
 
+  // Phím 9: đóng/mở menu bên trái, giống nút ☰ trên thanh rail.
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (event.key !== "9" || target?.isContentEditable || target?.tagName === "INPUT" || target?.tagName === "TEXTAREA" || target?.tagName === "SELECT") return;
+      event.preventDefault();
+      setIsSidebarCollapsed((collapsed) => !collapsed);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
+
   useOperationalLayerLoader();
 
   const railButton = (panel: PanelId, label: string, icon: React.ReactNode) => canSeeMenu(panel)
@@ -122,13 +135,13 @@ export function App() {
           {activePanel === "saved" && <SavedObjectsPanel />}
           {activePanel === "routing" && <RoutingPanel />}
         </Suspense>
-        <div style={{ display: activePanel === "conference" || isPresentationMode ? undefined : "none" }}><HnthPanel readOnly={isPresentationMode || !user || user.role === "viewer"} /></div>
+        <div style={{ display: activePanel === "conference" || isPresentationMode ? undefined : "none" }}><HnthPanel readOnly={isPresentationMode || !user || user.role === "viewer"} canRenewLease={Boolean(user) && user?.role !== "viewer"} /></div>
         {activePanel === "agents" && <PanelErrorBoundary><Suspense fallback={null}><AgentsPanel /></Suspense></PanelErrorBoundary>}
       </aside>
 
       <section className="map-area">
         <PanelErrorBoundary><MapCanvas /></PanelErrorBoundary>
-        <div className="map-title-card"><span>BẢN ĐỒ VẬN HÀNH</span><strong>{mapOperationTitle}</strong><small>20.8449° N, 106.6881° E</small></div>
+        <div className="map-title-card"><div className="map-title-info"><span>BẢN ĐỒ VẬN HÀNH</span><strong>{mapOperationTitle}</strong><small>20.8449° N, 106.6881° E</small></div><MapTitleClock /></div>
         <HnthStatusMetrics />
         {showUserAdmin && <Suspense fallback={null}><UserAdminPanel onClose={() => setShowUserAdmin(false)} /></Suspense>}
         <AuthModal auth={auth} />
