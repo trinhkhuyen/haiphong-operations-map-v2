@@ -1,0 +1,2 @@
+/* Màu trạng thái Backend/Agent trên thanh tiêu đề. */
+.system-state.offline strong,.system-state.offline small { color:#ff8d8d; }.system-state.offline .pulse { background:#ef4444;box-shadow:0 0 0 5px #ef444417,0 0 12px #ef4444; }.system-state.checking strong { color:#fbbf24; }.system-state.checking .pulse { background:#fbbf24;box-shadow:0 0 0 5px #fbbf2417,0 0 12px #fbbf24; }.hnth-monitor-error { margin:6px 0 10px;padding:8px 10px;border:1px solid #7f1d1d;border-radius:6px;background:#2a1115;color:#ff9b9b;font-size:10px;line-height:1.4; }

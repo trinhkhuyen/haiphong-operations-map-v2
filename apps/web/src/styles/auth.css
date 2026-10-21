@@ -1,0 +1,8 @@
+/* Modal đăng nhập / tài khoản. */
+.auth-overlay { padding:20px; background:radial-gradient(circle at 50% 35%,#16404bcc,#06101ae8 58%); backdrop-filter:blur(4px); }
+.auth-card { width:min(390px,calc(100% - 24px)); padding:24px; background:linear-gradient(145deg,#102839,#0b1925); border:1px solid #326078; border-radius:16px; box-shadow:0 22px 70px #000d,inset 0 1px #ffffff0d; }
+.auth-card h2 { color:#e5f5f7; font-size:20px; letter-spacing:.01em; }
+.auth-card input { height:42px; box-sizing:border-box; padding:0 12px; outline:0; border:1px solid #294d61; border-radius:8px; background:#091a27; color:#e8f3ff; font-size:12px; }
+.auth-card input::placeholder { color:#6f8b9a; }.auth-card input:focus { border-color:#2bc5c1; box-shadow:0 0 0 3px #2bc5c126; }.auth-card input:disabled { color:#718c99; background:#0d202c; }
+.auth-actions { margin-top:4px; }.auth-actions button { text-align:center; min-width:82px; }.auth-actions .primary-button { width:auto; height:39px; margin-top:0; padding:0 16px; background:linear-gradient(135deg,#14b8a6,#0891b2); border:0; }
+.auth-error { padding:9px 10px; border:1px solid #7f3341; border-radius:7px; background:#351923; color:#ffadb5; font-size:11px; }

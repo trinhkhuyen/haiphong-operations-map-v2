@@ -1,0 +1,12 @@
+/* Mobile: cụm điều khiển bản đồ ở góc phải dưới. */
+/* Mobile: luôn giữ cụm điều khiển bản đồ ở góc phải dưới. */
+@media (max-width:760px) {
+  /* Home nằm ngay phía trên cụm control MapLibre, trong đó có Fullscreen. */
+  /* Căn theo tọa độ màn hình: tâm Home phải cao hơn tâm Fullscreen. */
+  .map-navigation-tools { right:10px;bottom:228px;z-index:12;display:grid;visibility:visible;opacity:1;gap:6px; }
+  .map-navigation-tools > button { width:36px;height:36px; }
+  .base-map-menu { right:44px;bottom:0;width:min(220px,calc(100vw - 64px));max-height:calc(100vh - 170px);overflow:auto; }
+  .maplibregl-ctrl-bottom-right { right:10px;bottom:10px; }
+  .maplibregl-ctrl-bottom-right .maplibregl-ctrl { margin:0 0 6px; }
+  .maplibregl-ctrl-group button { width:36px;height:36px; }
+}

@@ -1,0 +1,9 @@
+/* Khung ứng dụng (lưới topbar / rail / panel / bản đồ), chế độ trình chiếu. */
+.app-shell { --topbar: 68px; display: grid; grid-template: var(--topbar) calc(100vh - var(--topbar)) / 64px 318px 1fr; background: #07131e; }
+.app-shell.sidebar-collapsed { grid-template-columns:64px minmax(0,1fr); }
+.app-shell.sidebar-collapsed .side-panel { display:none; }
+.app-shell.sidebar-collapsed .map-area { grid-column:2; }
+.app-shell.presentation-client { display:block; position:relative; width:100vw; height:100vh; }
+.presentation-client .topbar,.presentation-client .rail,.presentation-client .side-panel { display:none!important; }
+.presentation-client .map-area { position:absolute; inset:0; width:100vw; height:100vh; grid-column:auto; grid-row:auto; }
+.presentation-client .map-title-card { top:22px; left:22px; }

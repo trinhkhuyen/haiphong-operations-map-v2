@@ -1,0 +1,6 @@
+/* Font, biến gốc và reset. */
+:root { font-family: "Be Vietnam Pro", sans-serif; color: #dcecf7; background: #06101a; font-synthesis: none; }
+* { box-sizing: border-box; }
+body { margin: 0; min-width: 320px; min-height: 100vh; overflow: hidden; }
+button, input { font: inherit; }
+button { color: inherit; }
