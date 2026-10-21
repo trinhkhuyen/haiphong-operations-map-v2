@@ -16,7 +16,7 @@ Agent (Windows tray, Electron)  --HTTPS outbound, Bearer token-->  hnth-backend 
 | Thư mục | Vai trò | Ghi chú |
 |---|---|---|
 | `apps/web` | Frontend Vite/React/TS (strict) | Thành phần duy nhất có typecheck |
-| `services/hnth-backend` | API + SSE, `src/server.mjs` (1 file, route dạng if-chain), `src/db.mjs` (migrate idempotent lúc khởi động) | Node ESM thuần, không framework, không test |
+| `services/hnth-backend` | API + SSE. `src/server.mjs` (entry), `app.mjs` (ráp router), `routes/*.mjs` theo nhóm, `services/` (realtime/SSE, release), `auth.mjs`, `config.mjs`, `db.mjs` (migrate idempotent lúc khởi động) | Node ESM thuần, router tự viết, không framework; unit test ở `test/` |
 | `services/hnth-agent` | Agent LAN: `src/agent.mjs` (logic), `desktop/main.cjs` (Electron tray + tự cập nhật) | Build `.exe` bằng electron-builder |
 | `services/hnth-relay` | Relay in-memory cũ (cổng 8787) | **Lỗi thời** — backend 8788 đã thay thế. Không phát triển thêm |
 | `packages/hnth-protocol` | Hợp đồng dùng chung (ESM thuần + `index.d.ts`): từ vựng trạng thái, `toConnectionStatus`, `classifyProbeResult`, `OPERATOR_COMMAND_TYPES`, `readExeVersion`, `compareVersions` | Web, backend, agent đều import. Bản exe Agent kèm package này qua `extraResources` trong `electron-builder.yml` — thêm file mới vào package thì kiểm tra filter ở đó |
@@ -72,11 +72,13 @@ docker compose --env-file .env.source -f docker-compose.source.yml up -d --build
 
 **Gọi API từ web**: dùng `hnthFetch` (`core/hnth-api.ts`) — tự gắn Bearer, `no-store`, tự refresh khi 401. Base URL rỗng = same-origin `/api` (bắt buộc cho điện thoại trong LAN; đừng hardcode `localhost`).
 
-**Backend `server.mjs`**:
-- Thứ tự route quan trọng: mọi route đặt **trước** dòng `const user = await auth(req)` là công khai (live-view cho Guest + endpoint của Agent). Các bản sao `/api/hnth/status|monitor-state|discovered-ips|monitor-log|endpoints` đặt sau dòng đó là **code chết**.
+**Backend**:
+- Thêm route: `router.add(method, "/api/x/:id", handler, { public })` trong `routes/<nhóm>.mjs`. Mặc định route **cần đăng nhập** (app.mjs xác thực JWT trước, gán `user`); `public: true` chỉ cho live-view của Guest và API của Agent (tự kiểm tra token agent bằng `auth.agentAuthorizedForId`). Đường dẫn không khớp: chưa đăng nhập → 401, đã đăng nhập → 404.
+- Handler nhận `{ req, res, url, params, user, reply, readBody, corsOrigin }`; trả JSON bằng `reply(status, body, headers)`.
+- `config.mjs`: production (`NODE_ENV=production`) dừng khởi động nếu thiếu `JWT_SECRET`/`HNTH_AGENT_TOKEN`; dev dùng giá trị local.
 - Agent xác thực bằng token chung `HNTH_AGENT_TOKEN` (mở khóa *mọi* agentId) hoặc token riêng hash trong `agents.token_hash`.
 - Đổi schema: thêm `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` vào cuối `migrate()` trong `db.mjs`; không có hệ thống migration riêng.
-- Lệnh tới Agent = INSERT vào `commands`; Agent claim từng lệnh `pending` mỗi 3s. Các loại hợp lệ nằm trong set `allowed` của `POST /api/agents/:id/commands`.
+- Lệnh tới Agent = INSERT vào `commands`; Agent claim từng lệnh `pending` mỗi 3s. Các loại Operator được gửi nằm trong `OPERATOR_COMMAND_TYPES` (`hnth-protocol`); `agent-config` chỉ backend tạo.
 
 **Agent**:
 - `config.json` cạnh exe (hoặc `%APPDATA%\HNTH Agent\`) là nguồn sự thật về token, agentId và installationId. Agent ghi lại file này khi nhận `agent-config` hoặc khi enroll.
@@ -89,14 +91,14 @@ docker compose --env-file .env.source -f docker-compose.source.yml up -d --build
 ## Không được làm
 
 - Không sửa/đọc `.codex_tmp/` (Chrome profile của AI trước, có cookie/Login Data), `outputs/`, `artifacts/`, `services/hnth-agent/outputs/` — là rác/bản build.
-- Không đưa bí mật vào code hoặc file `*.example`. Mặc định yếu đang tồn tại (`admin123`, `change-this-*`, fallback `JWT_SECRET` trong `server.mjs`) — đừng nhân bản thêm.
+- Không đưa bí mật vào code hoặc file `*.example`. Mặc định yếu đang tồn tại (`admin123`, `change-this-*`, giá trị dev trong `config.mjs`) — đừng nhân bản thêm.
 - Không thêm dependency, không đổi `packageManager`/lockfile mà không hỏi.
 - Không commit/push khi chưa được yêu cầu. Nhánh làm việc mặc định là `main` với nhiều thay đổi chưa commit của người dùng — không `stash`/`reset`/`checkout --` lên chúng.
 
 ## Nợ kỹ thuật đã biết (chưa xử lý — hỏi trước khi sửa)
 
 1. **Repo cũ**: từ 2026-10-21 làm việc trên `origin` = `trinhkhuyen/haiphong-operations-map-v2` (lịch sử sạch, bắt đầu từ `d8337c4`). Repo cũ `haiphong-operations-map` đã archive (chỉ đọc) trên GitHub và vẫn chứa `.codex_tmp/` trong lịch sử. Bản sao cục bộ cũ (`Documents\Map`, nhánh `legacy-main`, `.codex_tmp/`, `artifacts/`, exe 0.1.x) đã bị xóa.
-2. Backend: không rate-limit `/api/auth/login`; cookie refresh thiếu `Secure`; `JWT_SECRET`/`HNTH_AGENT_TOKEN` có giá trị fallback cứng nếu thiếu env; `json()` không truyền `req` ở nhiều route nên CORS trả về origin đầu tiên; message lỗi 500 trả nguyên `error.message`.
+2. Backend: không rate-limit `/api/auth/login`; cookie refresh thiếu `Secure`; message lỗi 500 trả nguyên `error.message`; schema vẫn là một script idempotent trong `db.mjs` (chưa có migration theo phiên bản).
 3. Agent: lệnh `test-point` chuyển `ipAddress` chưa kiểm tra thẳng vào `ping.exe` (không qua shell, nhưng có thể chèn tham số như `-t`).
 4. Web: `UserAdminPanel` reset mật khẩu về chuỗi cứng; `xlsx@0.18.5` (bản npm đã ngừng, có CVE); `MapCanvas.tsx` ~2.900 dòng; bundle `index`/`map` >900 kB.
-5. Không có test, lint, CI (TASKLIST M0 vẫn mở).
+5. Chưa có lint và CI (đã có unit test + e2e).
