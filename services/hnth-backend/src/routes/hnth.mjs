@@ -116,8 +116,9 @@ export function registerHnthRoutes(router, { realtime }) {
     // Danh sách gửi lên là nguồn sự thật cho agent/phiên này. Không gộp với danh mục
     // endpoint toàn cục: danh sách import 50 điểm không được biến thành 115 điểm cũ.
     const points = submittedPoints.filter((point) => point.ip_address);
-    const currentMonitor = await pool.query("SELECT enabled FROM monitor_state WHERE id=1");
+    const currentMonitor = await pool.query("SELECT enabled,session_id AS \"sessionId\" FROM monitor_state WHERE id=1");
     const wasEnabled = Boolean(currentMonitor.rows[0]?.enabled);
+    const previousSessionId = currentMonitor.rows[0]?.sessionId ?? null;
     const startingNewSession = Boolean(body.enabled) && (!wasEnabled || body.resetStatuses === true);
     if (body.enabled) {
       // Lưu cấu hình trước khi dựng lệnh: database là nguồn sự thật, yêu cầu mới không
@@ -138,9 +139,10 @@ export function registerHnthRoutes(router, { realtime }) {
       await pool.query("UPDATE monitor_state SET enabled=$1,agent_id=$2,concurrency=$3,wait_seconds=$4,started_at=CASE WHEN $1 THEN COALESCE(started_at,now()) ELSE NULL END,lease_expires_at=CASE WHEN $1 THEN now() + make_interval(secs => $5) ELSE NULL END,updated_at=now(),revision=revision+1 WHERE id=1", [Boolean(body.enabled), targetAgentId, concurrency, waitSeconds, MONITOR_LEASE_SECONDS]);
     }
     await pool.query("UPDATE commands SET status='superseded' WHERE agent_id=$1 AND status='pending' AND type IN ('monitor-start','monitor-stop')", [targetAgentId]);
-    await pool.query("INSERT INTO commands(agent_id,type,payload) VALUES($1,$2,$3)", [targetAgentId, body.enabled ? "monitor-start" : "monitor-stop", JSON.stringify({ points: points.map((point) => ({ pointId: point.point_id, name: point.name, ipAddress: point.ip_address, modelVendor: point.model_vendor })), concurrency, waitSeconds, resetStatuses: startingNewSession })]);
-    await realtime.broadcastState();
     const session = await pool.query("SELECT session_id AS \"sessionId\" FROM monitor_state WHERE id=1");
-    return reply(202, { accepted: true, points: points.length, sessionId: session.rows[0]?.sessionId });
+    const sessionId = session.rows[0]?.sessionId ?? (body.enabled ? previousSessionId : null);
+    await pool.query("INSERT INTO commands(agent_id,type,payload) VALUES($1,$2,$3)", [targetAgentId, body.enabled ? "monitor-start" : "monitor-stop", JSON.stringify({ points: points.map((point) => ({ pointId: point.point_id, name: point.name, ipAddress: point.ip_address, modelVendor: point.model_vendor })), concurrency, waitSeconds, resetStatuses: startingNewSession, sessionId })]);
+    await realtime.broadcastState();
+    return reply(202, { accepted: true, points: points.length, sessionId });
   });
 }

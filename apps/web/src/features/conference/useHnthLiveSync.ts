@@ -34,10 +34,17 @@ export function useHnthLiveSync({ points, layer, continuousMonitoring, selectedA
   const monitoringFirstRoundCompleteRef = useRef(false);
   const monitoringSeenPointIdsRef = useRef(new Set<string>());
   const monitoringPendingAdministrativeIdsRef = useRef(new Set<number>());
+  const monitoringSessionIdRef = useRef<string | null>(null);
   // Snapshot riêng của Agent theo từng endpoint. Không dùng layer/store làm
   // trạng thái trước đó vì applyLiveResults có thể cập nhật chúng trước khi
   // batch kế tiếp được đem ra so sánh.
   const monitoringLastStatusRef = useRef(new globalThis.Map<string, HnthConnectionStatus>());
+  const resetMonitoringTracking = () => {
+    monitoringFirstRoundCompleteRef.current = false;
+    monitoringSeenPointIdsRef.current = new Set();
+    monitoringPendingAdministrativeIdsRef.current = new Set();
+    monitoringLastStatusRef.current = new globalThis.Map();
+  };
   useEffect(() => { pointsRef.current = points; }, [points]);
 
   // Đồng bộ trạng thái từ relay server nếu agent LAN đang hoạt động.
@@ -46,7 +53,7 @@ export function useHnthLiveSync({ points, layer, continuousMonitoring, selectedA
     if (!points.length) return;
     let cancelled = false;
     const handleMonitoringBatch = (
-      batch: { end?: number; total?: number; results?: unknown; allResults?: unknown },
+      batch: { end?: number; total?: number; sessionId?: string | null; results?: unknown; allResults?: unknown },
       monitoringEnabled = continuousMonitoring,
     ) => {
       // Agent gửi monitorBatch.allResults cho cả batch để frontend biết
@@ -56,7 +63,8 @@ export function useHnthLiveSync({ points, layer, continuousMonitoring, selectedA
       // Khi SSE vừa chuyển trạng thái từ tắt sang bật, state React chưa kịp
       // render trong cùng callback. Dùng cờ từ chính snapshot backend để không
       // bỏ qua batch đầu tiên của chu kỳ giám sát.
-      if (!monitoringEnabled || !Array.isArray(statusResults)) return;
+      const batchSessionId = String(batch.sessionId || "").trim() || null;
+      if (!monitoringEnabled || !Array.isArray(statusResults) || (batchSessionId && batchSessionId !== monitoringSessionIdRef.current)) return;
       const currentPoints = pointsRef.current;
       const pointById = new globalThis.Map(currentPoints.map((feature) => [String(feature.properties?.pointId ?? feature.id ?? "").trim(), feature]));
       const pointByIp = new globalThis.Map(currentPoints.map((feature) => [String(feature.properties?.ipAddress ?? "").trim(), feature]));
@@ -116,7 +124,7 @@ export function useHnthLiveSync({ points, layer, continuousMonitoring, selectedA
       // đổi; snapshot này sẽ được replay sau sự kiện layer-ready.
       latestLivePayloadRef.current = payload;
       if (cancelled) return;
-      const snapshot = payload as { agents?: Array<{ agentId?: string; name?: string; status?: string; version?: string | null }>; monitoring?: { agentId?: string } };
+      const snapshot = payload as { agents?: Array<{ agentId?: string; name?: string; status?: string; version?: string | null }>; monitoring?: { agentId?: string; enabled?: boolean; sessionId?: string | null } };
       // Agent được chọn trong snapshot backend là nguồn sự thật (có thể vừa được
       // đổi từ client khác); trạng thái chỉ phát cho đúng agent đó.
       const activeAgentId = String(snapshot.monitoring?.agentId ?? "").trim() || selectedAgentId;
@@ -126,7 +134,9 @@ export function useHnthLiveSync({ points, layer, continuousMonitoring, selectedA
           .filter((item) => item.agentId)
           .map((item) => ({ agentId: String(item.agentId), name: String(item.name || item.agentId), status: String(item.status || "offline"), version: item.version ? String(item.version) : undefined })));
       }
-      const monitorBatch = (payload as { monitorBatch?: { allResults?: unknown } }).monitorBatch;
+      const monitorBatch = (payload as { monitorBatch?: { sessionId?: string | null; allResults?: unknown } }).monitorBatch;
+      const payloadSessionId = String(snapshot.monitoring?.sessionId || monitorBatch?.sessionId || "").trim() || null;
+      if (payloadSessionId && payloadSessionId !== monitoringSessionIdRef.current) return;
       // Agent gửi `results` rút gọn chỉ gồm các thay đổi để tiết kiệm băng
       // thông, còn `allResults` là đúng batch vừa quét. Dùng allResults cho
       // phần vẽ để line/fill cập nhật ngay theo từng batch/số luồng, không bị
@@ -212,6 +222,11 @@ export function useHnthLiveSync({ points, layer, continuousMonitoring, selectedA
       // The backend resets the shared state when the admin starts a new
       // session. Other clients must consume that authoritative snapshot,
       // not locally reset/overwrite it from a stale React closure.
+      const nextSessionId = String(monitoring.sessionId || "").trim() || null;
+      if (nextSessionId !== monitoringSessionIdRef.current) {
+        monitoringSessionIdRef.current = nextSessionId;
+        resetMonitoringTracking();
+      }
       setContinuousMonitoring(Boolean(monitoring.enabled));
       if (Number.isFinite(monitoring.concurrency)) setPingConcurrency(Math.max(1, Math.min(30, Number(monitoring.concurrency))));
       if (Number.isFinite(monitoring.waitSeconds)) setMonitorWaitSeconds(Math.max(1, Math.min(10, Number(monitoring.waitSeconds))));
@@ -252,12 +267,5 @@ export function useHnthLiveSync({ points, layer, continuousMonitoring, selectedA
   // giữ continuousMonitoring=false và bỏ qua toàn bộ batch vòng 2.
   }, [continuousMonitoring, mergeOperationalLayers, points.length]);
 
-  /** Bắt đầu phiên giám sát mới: quên mốc trạng thái và vòng đầu của phiên trước. */
-  const resetMonitoringTracking = () => {
-    monitoringFirstRoundCompleteRef.current = false;
-    monitoringSeenPointIdsRef.current = new Set();
-    monitoringPendingAdministrativeIdsRef.current = new Set();
-    monitoringLastStatusRef.current = new globalThis.Map();
-  };
   return { resetMonitoringTracking };
 }

@@ -21,9 +21,10 @@ export function resultsToSend(results, lastSentStatuses, sendAll) {
 }
 
 /** Vòng Giám sát liên tục (monitor-start/stop, point-config). */
-export function createMonitor({ config, client, backendLossStopMs = AGENT_BACKEND_LOSS_STOP_SECONDS * 1000 }) {
+export function createMonitor({ config, client, backendLossStopMs = AGENT_BACKEND_LOSS_STOP_SECONDS * 1000, probe: probeOverride }) {
   let monitorTimer;
   let monitorRunId = 0;
+  let monitorSessionId = null;
   let monitorPoints = [];
   let monitorConcurrency = 1;
   let monitorWaitSeconds = 3;
@@ -32,11 +33,10 @@ export function createMonitor({ config, client, backendLossStopMs = AGENT_BACKEN
   const lastSentStatuses = new Map();
   const lastObservedStatuses = new Map();
   let monitorRotation = 0;
-  const probe = (point) => ping(point, config);
+  const probe = probeOverride || ((point) => ping(point, config));
   const logResults = (results) => { for (const item of results) console.log(`- ${item.name || item.pointId} : ${item.ipAddress || "Chưa có IP"} : ${item.status}`); };
 
-  async function monitorOnce() {
-    const runId = monitorRunId;
+  async function monitorOnce(runId, sessionId) {
     // Freeze the inputs for this cycle. A concurrency change replaces the
     // shared configuration while a cycle may still be awaiting ping results;
     // reading the mutable arrays below would then produce mixed totals/batches.
@@ -49,11 +49,12 @@ export function createMonitor({ config, client, backendLossStopMs = AGENT_BACKEN
     monitorRotation = (monitorRotation + cycleConcurrency) % Math.max(1, cyclePoints.length);
     let total = 0;
     for (let offset = 0; offset < cyclePoints.length; offset += cycleConcurrency) {
-      if (runId !== monitorRunId) return;
+      if (runId !== monitorRunId || sessionId !== monitorSessionId || !monitoringActive) return;
       const results = await Promise.all(cyclePoints.slice(offset, offset + cycleConcurrency).map(probe));
+      if (runId !== monitorRunId || sessionId !== monitorSessionId || !monitoringActive) return;
       for (const item of results) lastObservedStatuses.set(item.pointId, item.status);
       const changedResults = resultsToSend(results, lastSentStatuses, sendAllResults);
-      const batch = { start: offset + 1, end: offset + results.length, total: cyclePoints.length, concurrency: cycleConcurrency, sentAt: new Date().toISOString(), allResults: results };
+      const batch = { start: offset + 1, end: offset + results.length, total: cyclePoints.length, concurrency: cycleConcurrency, sentAt: new Date().toISOString(), sessionId, allResults: results };
       if (!changedResults.length) {
         console.log(`[${batch.sentAt}] monitoring batch ${offset + 1}-${offset + results.length}/${cyclePoints.length} with ${cycleConcurrency} concurrent pings: no status changes`);
         logResults(results);
@@ -62,6 +63,7 @@ export function createMonitor({ config, client, backendLossStopMs = AGENT_BACKEN
       // Một batch gửi lỗi không được làm chết cả vòng giám sát: bỏ qua batch này
       // (không ghi lastSentStatuses nên lần sau gửi lại), việc dừng hẳn do backendLost() quyết định.
       const response = await client.postJson(client.telemetryUrl, { agentId: config.agentId, timestamp: batch.sentAt, results: changedResults, monitorBatch: batch }).catch((error) => ({ ok: false, status: error.message }));
+      if (runId !== monitorRunId || sessionId !== monitorSessionId || !monitoringActive) return;
       if (!response.ok) {
         console.error(`[${batch.sentAt}] monitoring batch ${offset + 1}-${offset + results.length}/${cyclePoints.length} upload failed: ${response.status}`);
         if (backendLost()) return total;
@@ -72,7 +74,7 @@ export function createMonitor({ config, client, backendLossStopMs = AGENT_BACKEN
       console.log(`[${batch.sentAt}] monitoring batch ${offset + 1}-${offset + results.length}/${cyclePoints.length} with ${cycleConcurrency} concurrent pings`);
       logResults(results);
     }
-    monitorInitialCyclePending = false;
+    if (runId === monitorRunId && sessionId === monitorSessionId && monitoringActive) monitorInitialCyclePending = false;
     return total;
   }
 
@@ -87,7 +89,8 @@ export function createMonitor({ config, client, backendLossStopMs = AGENT_BACKEN
   async function monitorLoop() {
     const runId = ++monitorRunId;
     while (runId === monitorRunId && monitorPoints.length > 0) {
-      try { await monitorOnce(); } catch (error) { console.error(`monitoring cycle failed: ${error.message}`); }
+      const sessionId = monitorSessionId;
+      try { await monitorOnce(runId, sessionId); } catch (error) { console.error(`monitoring cycle failed: ${error.message}`); }
       if (runId !== monitorRunId || backendLost()) return;
       await new Promise((resolve) => { monitorTimer = setTimeout(resolve, monitorWaitSeconds * 1000); });
     }
@@ -97,6 +100,7 @@ export function createMonitor({ config, client, backendLossStopMs = AGENT_BACKEN
     const previousConcurrency = monitorConcurrency;
     const previousWaitSeconds = monitorWaitSeconds;
     monitorRunId += 1;
+    monitorSessionId = String(command.sessionId || `agent-run-${monitorRunId}`);
     monitoringActive = true;
     setAgentState({ monitoring: true });
     monitorPoints = (command.points || []).map((point) => ({ ...point, name: point.name || point.pointId }));
@@ -117,6 +121,7 @@ export function createMonitor({ config, client, backendLossStopMs = AGENT_BACKEN
 
   function stop(reason = "") {
     monitoringActive = false;
+    monitorSessionId = null;
     setAgentState({ monitoring: false });
     monitorRunId += 1;
     clearTimeout(monitorTimer);

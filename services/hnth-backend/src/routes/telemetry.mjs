@@ -8,6 +8,16 @@ export function registerTelemetryRoutes(router, { auth, realtime }) {
     const body = await readBody();
     if (!body.agentId || !Array.isArray(body.results)) return reply(400, { error: "invalid snapshot" });
     if (!(await auth.agentAuthorizedForId(req, body.agentId))) return reply(401, { error: "unauthorized" });
+    const monitorSessionId = String(body.monitorBatch?.sessionId || "").trim();
+    if (monitorSessionId) {
+      const monitor = await pool.query("SELECT enabled,agent_id AS \"agentId\",session_id AS \"sessionId\" FROM monitor_state WHERE id=1");
+      const current = monitor.rows[0];
+      // Một ping có thể hoàn thành sau khi operator đã tắt/bật lại. Không để
+      // kết quả của phiên cũ ghi đè trạng thái hoặc phát lên bản đồ phiên mới.
+      if (!current?.enabled || current.agentId !== body.agentId || String(current.sessionId || "") !== monitorSessionId) {
+        return reply(202, { accepted: false, stale: true });
+      }
+    }
     await touchAgent(body.agentId);
     for (const item of body.results) {
       const pointId = String(item.pointId || item.ipAddress || "").trim();

@@ -10,9 +10,9 @@ import { hnthApi } from "../api/clients";
 import { useHnthLiveStore, type HnthCatalog, type HnthRoster } from "./hnth-live-store";
 
 type AgentSummary = { agentId?: string; name?: string; status?: string; version?: string | null };
-type MonitoringPayload = { enabled?: boolean; concurrency?: number; waitSeconds?: number; agentId?: string };
+type MonitoringPayload = { enabled?: boolean; concurrency?: number; waitSeconds?: number; agentId?: string; sessionId?: string | null };
 
-export type MonitorBatch = { start?: number; end?: number; total?: number; concurrency?: number; sentAt?: string; results?: unknown; allResults?: unknown };
+export type MonitorBatch = { start?: number; end?: number; total?: number; concurrency?: number; sentAt?: string; sessionId?: string | null; results?: unknown; allResults?: unknown };
 
 /** Snapshot monitor-state và message SSE cùng một hình dạng (backend broadcastState). */
 export type HnthLivePayload = {

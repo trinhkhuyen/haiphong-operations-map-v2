@@ -108,6 +108,34 @@ describe("monitor", () => {
     await new Promise((resolve) => setTimeout(resolve, 1300));
     assert.equal(uploads, after, "đã dừng hẳn, không ping/gửi ngầm");
   });
+  it("kết quả của phiên cũ đang await không được upload sau khi bật phiên mới", async () => {
+    let releaseOld;
+    let probes = 0;
+    const uploads = [];
+    const client = {
+      telemetryUrl: "http://backend.test/api/telemetry/ping-results",
+      msSinceContact: () => 0,
+      postJson: async (_url, body) => { uploads.push(body); return { ok: true }; },
+    };
+    const monitor = createMonitor({
+      config: { agentId: "t", probeCount: 1 },
+      client,
+      probe: async (point) => {
+        probes += 1;
+        if (point.pointId === "old") await new Promise((resolve) => { releaseOld = resolve; });
+        return { pointId: point.pointId, status: "online", ipAddress: `10.0.0.${point.pointId === "old" ? 1 : 2}`, checkedAt: new Date().toISOString() };
+      },
+    });
+    monitor.start({ sessionId: "old-session", points: [{ pointId: "old" }], waitSeconds: 10 });
+    for (let i = 0; i < 20 && !releaseOld; i += 1) await new Promise((resolve) => setTimeout(resolve, 5));
+    assert.equal(typeof releaseOld, "function", "phiên cũ đã bắt đầu ping");
+    monitor.start({ sessionId: "new-session", points: [{ pointId: "new" }], waitSeconds: 10 });
+    releaseOld();
+    for (let i = 0; i < 20 && uploads.length === 0; i += 1) await new Promise((resolve) => setTimeout(resolve, 5));
+    monitor.stop();
+    assert.ok(probes >= 2, "đã ping cả phiên cũ và phiên mới");
+    assert.deepEqual(uploads.map((body) => body.monitorBatch.sessionId), ["new-session"]);
+  });
 });
 
 describe("identity", () => {
