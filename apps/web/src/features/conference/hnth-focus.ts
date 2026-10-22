@@ -7,6 +7,12 @@ import type { HnthPointFeature } from "./hnth-types";
 export function focusHnthPoint(item: HnthPointFeature) {
   const state = useAppStore.getState();
   const pointId = String(item.properties?.pointId ?? item.id);
+  if (item.properties?.role === "extra") {
+    state.setSelectedHnthPointId(pointId);
+    emitAppEvent("hnth:extra-focus", { pointId });
+    emitAppEvent("map:context-info", { kind: "hnth", pointId });
+    return;
+  }
   const wardCode = String(item.properties?.wardCode ?? "");
   const administrativeId = state.administrativeUnits.find((unit) => String(unit.wardCode ?? "") === wardCode)?.id;
   state.setSelectedHnthPointId(pointId);

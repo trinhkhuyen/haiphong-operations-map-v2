@@ -1,5 +1,7 @@
 # Hải Phòng Operations Map
 
+> **Cài đặt trên máy mới / chạy backend + frontend:** xem [docs/HUONG-DAN-TRIEN-KHAI.md](docs/HUONG-DAN-TRIEN-KHAI.md). Một số mục bên dưới (`packages/contracts`, `services/api`, `infra`) là kế hoạch cũ, chưa tồn tại.
+
 Nền tảng WebGIS giám sát vận hành được tổ chức theo module để có thể mở rộng độc lập.
 
 ## Chạy local

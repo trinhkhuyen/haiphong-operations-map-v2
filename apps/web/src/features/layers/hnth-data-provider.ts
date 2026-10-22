@@ -1,6 +1,7 @@
 import type { ConnectionStatus } from "@haiphong-ops/hnth-protocol";
 import type { Feature, FeatureCollection, Geometry, LineString, Point } from "geojson";
 import type { OperationalLayer } from "../../core/types";
+import type { HnthCatalog, HnthRoster, HnthRosterPoint } from "../../core/realtime/hnth-live-store";
 
 export const HNTH_LAYER_ID = "hnth-network";
 
@@ -43,7 +44,9 @@ export interface HnthPointOverride {
 }
 
 // Vị trí thật theo Google Maps: Trung tâm Chính trị - Hành chính TP. Hải Phòng.
-const HNTH_HUB: [number, number] = [106.6790562, 20.8821839];
+export const HNTH_HUB: [number, number] = [106.6790562, 20.8821839];
+/** Tên cố định của điểm Trung tâm (Import chấp nhận cả tên cũ "... TP. Hải Phòng"). */
+export const HNTH_HUB_NAME = "Trung tâm Chính trị - Hành chính";
 
 interface UbndSnapshotProperties {
   name?: string;
@@ -51,7 +54,14 @@ interface UbndSnapshotProperties {
   administrativeType?: string;
 }
 
-export async function loadHnthDemoLayer(signal?: AbortSignal): Promise<OperationalLayer> {
+// Lớp gốc (chưa áp danh sách phiên/IP) dùng lại khi đổi danh sách phiên họp, không tải lại file.
+let baseLayerPromise: Promise<OperationalLayer> | null = null;
+export function loadHnthDemoLayer(): Promise<OperationalLayer> {
+  baseLayerPromise ??= buildHnthDemoLayer().catch((error: unknown) => { baseLayerPromise = null; throw error; });
+  return baseLayerPromise;
+}
+
+async function buildHnthDemoLayer(signal?: AbortSignal): Promise<OperationalLayer> {
   const response = await fetch("/data/osm-layers/government-ubnd.json", { signal });
   if (!response.ok) throw new Error(`Không tải được danh sách UBND (${response.status})`);
   const ubnd = await response.json() as FeatureCollection<Geometry, UbndSnapshotProperties>;
@@ -63,7 +73,7 @@ export async function loadHnthDemoLayer(signal?: AbortSignal): Promise<Operation
     id: "hnth-hub",
     properties: {
       pointId: "hnth-hub",
-      name: "Trung tâm Chính trị - Hành chính TP. Hải Phòng",
+      name: HNTH_HUB_NAME,
       role: "hub",
       roleLabel: "Điểm chính HNTH",
       status: "unknown",
@@ -145,6 +155,52 @@ export function applyHnthPointOverrides(layer: OperationalLayer, overrides: Reco
             ...(status !== "unknown" ? { statusLabel: HNTH_STATUS_LABELS[status] } : { statusLabel: undefined }),
           },
         };
+      }),
+    },
+  };
+}
+
+/** Điểm của phiên: danh sách đang áp dụng lọc từ dữ liệu chủ; không chọn danh sách = toàn bộ dữ liệu chủ. */
+export function hnthSessionPoints(catalog: HnthCatalog | null, roster: HnthRoster | null): HnthRosterPoint[] | null {
+  if (!catalog?.points.length) return null;
+  if (!roster) return catalog.points;
+  const ids = new Set(roster.pointIds);
+  return catalog.points.filter((point) => ids.has(point.pointId));
+}
+
+/**
+ * Lớp HNTH theo dữ liệu chủ + danh sách phiên họp: chỉ giữ xã/phường của phiên (xã/phường khác
+ * "không tham gia": không vẽ, không đếm, không ping), thêm điểm Sở/Ban/Ngành (role "extra",
+ * không có vị trí thật nên không vẽ trên bản đồ mà hiển thị bằng card), lấy tên Sở/Ban/Ngành và
+ * IP/Gateway/Model từ dữ liệu chủ. Trạng thái vẫn lấy từ `overrides` (kết quả giám sát gần nhất).
+ * Chưa Import dữ liệu chủ thì giữ 115 điểm mặc định như trước.
+ */
+export function composeHnthLayer(base: OperationalLayer, overrides: Record<string, HnthPointOverride>, catalog: HnthCatalog | null, roster: HnthRoster | null): OperationalLayer {
+  const sessionPoints = hnthSessionPoints(catalog, roster);
+  if (!sessionPoints) return applyHnthPointOverrides(base, overrides);
+  const byId = new Map(sessionPoints.map((point) => [point.pointId, point]));
+  const kept = base.data.features.filter((item) => {
+    const pointId = String(item.properties?.pointId ?? "");
+    return pointId === "hnth-hub" || byId.has(pointId);
+  });
+  const extras: Feature<Geometry>[] = sessionPoints.filter((point) => point.kind === "extra").map((point) => ({
+    type: "Feature",
+    id: point.pointId,
+    properties: { pointId: point.pointId, name: point.name, role: "extra", roleLabel: "Sở/Ban/Ngành", status: "unknown", ipAddress: "", gateway: "", source: roster?.name ?? "Dữ liệu điểm cầu" },
+    geometry: { type: "Point", coordinates: HNTH_HUB },
+  }));
+  const withStatus = applyHnthPointOverrides({ ...base, count: kept.filter((item) => item.geometry.type === "Point").length + extras.length, data: { ...base.data, features: [...kept, ...extras] } }, overrides);
+  return {
+    ...withStatus,
+    data: {
+      ...withStatus.data,
+      features: withStatus.data.features.map((item) => {
+        const point = byId.get(String(item.properties?.pointId ?? ""));
+        if (!point) return item;
+        const ipAddress = point.ipAddress.trim();
+        // Không có IP thì luôn "Chưa xác định", giống quy ước ở backend.
+        const status = ipAddress ? normalizeHnthStatus(item.properties?.status) : "unknown";
+        return { ...item, properties: { ...item.properties, ...(point.kind === "extra" ? { name: point.name } : {}), ipAddress, gateway: point.gateway || item.properties?.gateway || "", model: point.modelVendor || item.properties?.model || "", status, statusLabel: status === "unknown" ? undefined : HNTH_STATUS_LABELS[status] } };
       }),
     },
   };

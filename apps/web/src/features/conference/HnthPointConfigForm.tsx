@@ -7,7 +7,7 @@ import type { DiscoveredIp, HnthPointFeature } from "./hnth-types";
 type Field = { value: string; onChange: (value: string) => void };
 
 /** Thẻ Cấu hình điểm: IP (chọn từ IP đã quét hoặc nhập tay), Gateway, Model, các thao tác và Import/Export. */
-export function HnthPointConfigForm({ point, status, readOnly, discoveredIps, assignedIps, ipAddress, gateway, model, onSave, onTest, onShowInfo, onImport, onExport }: {
+export function HnthPointConfigForm({ point, status, readOnly, discoveredIps, assignedIps, ipAddress, gateway, model, onSave, onTest, onShowInfo, onImport, onExport, rosterSlot }: {
   point: HnthPointFeature;
   status: HnthConnectionStatus;
   readOnly: boolean;
@@ -22,6 +22,8 @@ export function HnthPointConfigForm({ point, status, readOnly, discoveredIps, as
   onShowInfo: () => void;
   onImport: (file: File) => Promise<void>;
   onExport: () => void;
+  /** Chọn/sửa danh sách điểm cầu của phiên họp, nằm dưới Import/Export. */
+  rosterSlot?: React.ReactNode;
 }) {
   const importInputRef = useRef<HTMLInputElement>(null);
   const pointName = String(point.properties?.name ?? "Điểm HNTH");
@@ -61,5 +63,6 @@ export function HnthPointConfigForm({ point, status, readOnly, discoveredIps, as
       <button type="button" disabled={readOnly} onClick={() => importInputRef.current?.click()} title="Nhập danh sách Tên điểm, IP, Gateway, Model/Vendor"><Upload size={14}/> Import</button>
       <button type="button" disabled={readOnly} onClick={onExport} title="Xuất danh sách Tên điểm, IP, Gateway, Model/Vendor"><Download size={14}/> Export</button>
     </div>
+    {rosterSlot}
   </div>;
 }

@@ -30,6 +30,8 @@ export type AppEventMap = {
   "hnth:layer-ready": undefined;
   /** Đưa camera tới một điểm HNTH (và khoanh địa giới của nó). */
   "hnth:focus": HnthFocusDetail;
+  /** Chọn điểm Sở/Ban/Ngành (không có vị trí trên bản đồ): card của điểm đó nhấp nháy viền. */
+  "hnth:extra-focus": { pointId: string };
   /** Mở popup Test/Ping và gửi lệnh test-point tới Agent. */
   "hnth:test-point": { pointId?: string; ipAddress?: string; runId?: number };
   "hnth:open-point-log": { pointId?: string };

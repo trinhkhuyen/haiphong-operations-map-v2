@@ -24,6 +24,24 @@ export const hnthApi = {
   scan: (body: { scanSubnets: string[]; agentId?: string }) => hnthFetch(apiUrl("/api/hnth/scan"), jsonRequest("POST", body)),
 };
 
+/** Dữ liệu chủ điểm cầu (Import): PUT thay toàn bộ, trả các danh sách bị bỏ bớt điểm. */
+export const hnthCatalogApi = {
+  get: () => hnthFetch(apiUrl("/api/hnth/catalog")),
+  save: (points: unknown[]) => hnthFetch(apiUrl("/api/hnth/catalog"), jsonRequest("PUT", { points })),
+};
+
+/** Danh sách phiên họp = mã điểm chọn từ dữ liệu chủ (Operator/Admin). id "default" = toàn bộ dữ liệu chủ. */
+export type RosterBody = { name: string; pointIds: string[] };
+const rosterPath = (id: string, suffix = "") => apiUrl(`/api/hnth/rosters/${encodeURIComponent(id)}${suffix}`);
+export const rostersApi = {
+  list: () => hnthFetch(apiUrl("/api/hnth/rosters")),
+  get: (id: string) => hnthFetch(rosterPath(id)),
+  create: (body: RosterBody) => hnthFetch(apiUrl("/api/hnth/rosters"), jsonRequest("POST", body)),
+  update: (id: string, body: RosterBody) => hnthFetch(rosterPath(id), jsonRequest("PUT", body)),
+  remove: (id: string) => hnthFetch(rosterPath(id), { method: "DELETE" }),
+  activate: (id: string) => hnthFetch(rosterPath(id, "/activate"), { method: "POST" }),
+};
+
 const agentPath = (agentId: string, suffix = "") => apiUrl(`/api/agents/${encodeURIComponent(agentId)}${suffix}`);
 
 export const agentsApi = {

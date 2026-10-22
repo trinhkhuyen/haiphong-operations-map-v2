@@ -6,6 +6,7 @@ import { registerAgentApiRoutes } from "./routes/agent-api.mjs";
 import { registerAgentRoutes } from "./routes/agents.mjs";
 import { registerAuthRoutes } from "./routes/auth.mjs";
 import { registerHnthRoutes } from "./routes/hnth.mjs";
+import { registerHnthRosterRoutes } from "./routes/hnth-rosters.mjs";
 import { registerTelemetryRoutes } from "./routes/telemetry.mjs";
 import { registerUserRoutes } from "./routes/users.mjs";
 
@@ -22,6 +23,7 @@ export function createApp(config) {
   registerAgentRoutes(router, deps);
   registerTelemetryRoutes(router, deps);
   registerHnthRoutes(router, deps);
+  registerHnthRosterRoutes(router, deps);
 
   async function handle(req, res) {
     const origin = corsOrigin(req);

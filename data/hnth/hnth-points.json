@@ -1,0 +1,1136 @@
+{
+  "exportedAt": "2026-10-21T21:44:53.509Z",
+  "catalog": [
+    {
+      "kind": "hub",
+      "name": "Trung tâm Chính trị - Hành chính",
+      "gateway": "192.168.1.1",
+      "pointId": "hnth-hub",
+      "ipAddress": "192.168.1.169",
+      "modelVendor": "Vendor 1"
+    },
+    {
+      "kind": "ward",
+      "name": "UBND Ái Quốc",
+      "gateway": "192.168.1.1",
+      "pointId": "hnth-branch-110",
+      "ipAddress": "192.168.1.159",
+      "modelVendor": "Vendor 2"
+    },
+    {
+      "kind": "ward",
+      "name": "UBND An Biên",
+      "gateway": "192.168.1.1",
+      "pointId": "hnth-branch-13",
+      "ipAddress": "192.168.1.158",
+      "modelVendor": "Vendor 3"
+    },
+    {
+      "kind": "ward",
+      "name": "UBND An Dương",
+      "gateway": "192.168.1.1",
+      "pointId": "hnth-branch-20",
+      "ipAddress": "192.168.1.157",
+      "modelVendor": "Vendor 4"
+    },
+    {
+      "kind": "ward",
+      "name": "UBND An Hải",
+      "gateway": "192.168.1.1",
+      "pointId": "hnth-branch-2",
+      "ipAddress": "192.168.1.156",
+      "modelVendor": "Vendor 5"
+    },
+    {
+      "kind": "ward",
+      "name": "UBND An Hưng",
+      "gateway": "192.168.1.1",
+      "pointId": "hnth-branch-38",
+      "ipAddress": "192.168.1.155",
+      "modelVendor": "Vendor 6"
+    },
+    {
+      "kind": "ward",
+      "name": "UBND An Khánh",
+      "gateway": "192.168.1.1",
+      "pointId": "hnth-branch-35",
+      "ipAddress": "192.168.1.161",
+      "modelVendor": "Vendor 7"
+    },
+    {
+      "kind": "ward",
+      "name": "UBND An Lão",
+      "gateway": "192.168.1.1",
+      "pointId": "hnth-branch-33",
+      "ipAddress": "192.168.1.126",
+      "modelVendor": "Vendor 8"
+    },
+    {
+      "kind": "ward",
+      "name": "UBND An Phong",
+      "gateway": "192.168.1.1",
+      "pointId": "hnth-branch-31",
+      "ipAddress": "192.168.1.125",
+      "modelVendor": "Vendor 9"
+    },
+    {
+      "kind": "ward",
+      "name": "UBND An Phú",
+      "gateway": "192.168.1.1",
+      "pointId": "hnth-branch-89",
+      "ipAddress": "192.168.1.124",
+      "modelVendor": "Vendor 10"
+    },
+    {
+      "kind": "ward",
+      "name": "UBND An Quang",
+      "gateway": "192.168.1.1",
+      "pointId": "hnth-branch-34",
+      "ipAddress": "192.168.1.123",
+      "modelVendor": "Vendor 11"
+    },
+    {
+      "kind": "ward",
+      "name": "UBND An Thành",
+      "gateway": "192.168.1.1",
+      "pointId": "hnth-branch-93",
+      "ipAddress": "192.168.1.122",
+      "modelVendor": "Vendor 12"
+    },
+    {
+      "kind": "ward",
+      "name": "UBND An Trường",
+      "gateway": "192.168.1.1",
+      "pointId": "hnth-branch-32",
+      "ipAddress": "192.168.1.121",
+      "modelVendor": "Vendor 13"
+    },
+    {
+      "kind": "ward",
+      "name": "UBND Bạch Đằng",
+      "gateway": "192.168.1.1",
+      "pointId": "hnth-branch-18",
+      "ipAddress": "192.168.1.120",
+      "modelVendor": "Vendor 14"
+    },
+    {
+      "kind": "ward",
+      "name": "UBND Bạch Long Vĩ",
+      "gateway": "192.168.1.1",
+      "pointId": "hnth-branch-1",
+      "ipAddress": "192.168.1.160",
+      "modelVendor": "Vendor 15"
+    },
+    {
+      "kind": "ward",
+      "name": "UBND Bắc An Phụ",
+      "gateway": "192.168.1.1",
+      "pointId": "hnth-branch-108",
+      "ipAddress": "192.168.1.118",
+      "modelVendor": "Vendor 16"
+    },
+    {
+      "kind": "ward",
+      "name": "UBND Bắc Thanh Miện",
+      "gateway": "192.168.1.1",
+      "pointId": "hnth-branch-42",
+      "ipAddress": "192.168.1.117",
+      "modelVendor": "Vendor 17"
+    },
+    {
+      "kind": "ward",
+      "name": "UBND Bình Giang",
+      "gateway": "192.168.1.1",
+      "pointId": "hnth-branch-62",
+      "ipAddress": "192.168.1.116",
+      "modelVendor": "Vendor 18"
+    },
+    {
+      "kind": "ward",
+      "name": "UBND Cát Hải",
+      "gateway": "192.168.1.1",
+      "pointId": "hnth-branch-69",
+      "ipAddress": "192.168.1.1",
+      "modelVendor": "Cisco"
+    },
+    {
+      "kind": "ward",
+      "name": "UBND Cẩm Giàng",
+      "gateway": "192.168.1.1",
+      "pointId": "hnth-branch-59",
+      "ipAddress": "192.168.1.114",
+      "modelVendor": "Vendor 20"
+    },
+    {
+      "kind": "ward",
+      "name": "UBND Cẩm Giang",
+      "gateway": "192.168.1.1",
+      "pointId": "hnth-branch-64",
+      "ipAddress": "192.168.1.113",
+      "modelVendor": "Vendor 21"
+    },
+    {
+      "kind": "ward",
+      "name": "UBND Chấn Hưng",
+      "gateway": "192.168.1.1",
+      "pointId": "hnth-branch-27",
+      "ipAddress": "192.168.1.112",
+      "modelVendor": "Vendor 22"
+    },
+    {
+      "kind": "ward",
+      "name": "UBND Chí Linh",
+      "gateway": "192.168.1.1",
+      "pointId": "hnth-branch-107",
+      "ipAddress": "192.168.1.111",
+      "modelVendor": "Vendor 23"
+    },
+    {
+      "kind": "ward",
+      "name": "UBND Chí Minh",
+      "gateway": "192.168.1.1",
+      "pointId": "hnth-branch-97",
+      "ipAddress": "192.168.1.110",
+      "modelVendor": "Vendor 24"
+    },
+    {
+      "kind": "ward",
+      "name": "UBND Chu Văn An",
+      "gateway": "192.168.1.1",
+      "pointId": "hnth-branch-106",
+      "ipAddress": "192.168.1.109",
+      "modelVendor": "Vendor 25"
+    },
+    {
+      "kind": "ward",
+      "name": "UBND Dương Kinh",
+      "gateway": "192.168.1.1",
+      "pointId": "hnth-branch-75",
+      "ipAddress": "192.168.1.108",
+      "modelVendor": "Vendor 26"
+    },
+    {
+      "kind": "ward",
+      "name": "UBND Đại Sơn",
+      "gateway": "192.168.1.1",
+      "pointId": "hnth-branch-92",
+      "ipAddress": "192.168.1.107",
+      "modelVendor": "Vendor 27"
+    },
+    {
+      "kind": "ward",
+      "name": "UBND Đồ Sơn",
+      "gateway": "192.168.1.1",
+      "pointId": "hnth-branch-70",
+      "ipAddress": "192.168.1.106",
+      "modelVendor": "Vendor 28"
+    },
+    {
+      "kind": "ward",
+      "name": "UBND Đông Hải",
+      "gateway": "192.168.1.1",
+      "pointId": "hnth-branch-83",
+      "ipAddress": "192.168.1.105",
+      "modelVendor": "Vendor 29"
+    },
+    {
+      "kind": "ward",
+      "name": "UBND Đường An",
+      "gateway": "192.168.1.1",
+      "pointId": "hnth-branch-63",
+      "ipAddress": "192.168.1.104",
+      "modelVendor": "Vendor 30"
+    },
+    {
+      "kind": "ward",
+      "name": "UBND Gia Lộc",
+      "gateway": "192.168.1.1",
+      "pointId": "hnth-branch-68",
+      "ipAddress": "192.168.1.103",
+      "modelVendor": "Vendor 31"
+    },
+    {
+      "kind": "ward",
+      "name": "UBND Gia Phúc",
+      "gateway": "192.168.1.1",
+      "pointId": "hnth-branch-78",
+      "ipAddress": "192.168.1.102",
+      "modelVendor": "Vendor 32"
+    },
+    {
+      "kind": "ward",
+      "name": "UBND Gia Viên",
+      "gateway": "192.168.1.1",
+      "pointId": "hnth-branch-14",
+      "ipAddress": "192.168.1.101",
+      "modelVendor": "Vendor 33"
+    },
+    {
+      "kind": "ward",
+      "name": "UBND Hà Bắc",
+      "gateway": "192.168.1.1",
+      "pointId": "hnth-branch-96",
+      "ipAddress": "192.168.1.100",
+      "modelVendor": "Vendor 34"
+    },
+    {
+      "kind": "ward",
+      "name": "UBND Hà Đông",
+      "gateway": "192.168.1.1",
+      "pointId": "hnth-branch-86",
+      "ipAddress": "192.168.1.99",
+      "modelVendor": "Vendor 35"
+    },
+    {
+      "kind": "ward",
+      "name": "UBND Hà Nam",
+      "gateway": "192.168.1.1",
+      "pointId": "hnth-branch-94",
+      "ipAddress": "192.168.1.98",
+      "modelVendor": "Vendor 36"
+    },
+    {
+      "kind": "ward",
+      "name": "UBND Hà Tây",
+      "gateway": "192.168.1.1",
+      "pointId": "hnth-branch-91",
+      "ipAddress": "192.168.1.97",
+      "modelVendor": "Vendor 37"
+    },
+    {
+      "kind": "ward",
+      "name": "UBND Hải An",
+      "gateway": "192.168.1.1",
+      "pointId": "hnth-branch-11",
+      "ipAddress": "192.168.1.96",
+      "modelVendor": "Vendor 38"
+    },
+    {
+      "kind": "ward",
+      "name": "UBND Hải Dương",
+      "gateway": "192.168.1.1",
+      "pointId": "hnth-branch-85",
+      "ipAddress": "192.168.1.95",
+      "modelVendor": "Vendor 39"
+    },
+    {
+      "kind": "ward",
+      "name": "UBND Hải Hưng",
+      "gateway": "10.33.1.1",
+      "pointId": "hnth-branch-41",
+      "ipAddress": "192.168.1.94",
+      "modelVendor": "Vendor 40"
+    },
+    {
+      "kind": "ward",
+      "name": "UBND Hòa Bình",
+      "gateway": "192.168.1.1",
+      "pointId": "hnth-branch-17",
+      "ipAddress": "192.168.1.93",
+      "modelVendor": "Vendor 41"
+    },
+    {
+      "kind": "ward",
+      "name": "UBND Hồng An",
+      "gateway": "192.168.1.1",
+      "pointId": "hnth-branch-6",
+      "ipAddress": "192.168.1.92",
+      "modelVendor": "Vendor 42"
+    },
+    {
+      "kind": "ward",
+      "name": "UBND Hồng Bàng",
+      "gateway": "192.168.1.1",
+      "pointId": "hnth-branch-15",
+      "ipAddress": "192.168.1.91",
+      "modelVendor": "Vendor 43"
+    },
+    {
+      "kind": "ward",
+      "name": "UBND Hồng Châu",
+      "gateway": "192.168.1.1",
+      "pointId": "hnth-branch-49",
+      "ipAddress": "192.168.1.90",
+      "modelVendor": "Vendor 44"
+    },
+    {
+      "kind": "ward",
+      "name": "UBND Hợp Tiến",
+      "gateway": "192.168.1.1",
+      "pointId": "hnth-branch-104",
+      "ipAddress": "192.168.1.89",
+      "modelVendor": "Vendor 45"
+    },
+    {
+      "kind": "ward",
+      "name": "UBND Hùng Thắng",
+      "gateway": "192.168.1.1",
+      "pointId": "hnth-branch-71",
+      "ipAddress": "",
+      "modelVendor": "Vendor 46"
+    },
+    {
+      "kind": "ward",
+      "name": "UBND Hưng Đạo",
+      "gateway": "192.168.1.1",
+      "pointId": "hnth-branch-16",
+      "ipAddress": "192.168.1.87",
+      "modelVendor": "Vendor 47"
+    },
+    {
+      "kind": "ward",
+      "name": "UBND Kẻ Sặt",
+      "gateway": "192.168.1.1",
+      "pointId": "hnth-branch-60",
+      "ipAddress": "192.168.1.86",
+      "modelVendor": "Vendor 48"
+    },
+    {
+      "kind": "ward",
+      "name": "UBND Khúc Thừa Dụ",
+      "gateway": "192.168.1.1",
+      "pointId": "hnth-branch-48",
+      "ipAddress": "192.168.1.85",
+      "modelVendor": "Vendor 49"
+    },
+    {
+      "kind": "ward",
+      "name": "UBND Kiến An",
+      "gateway": "192.168.1.1",
+      "pointId": "hnth-branch-10",
+      "ipAddress": "192.168.1.84",
+      "modelVendor": "Vendor 50"
+    },
+    {
+      "kind": "ward",
+      "name": "UBND Kiến Hải",
+      "gateway": "192.168.1.1",
+      "pointId": "hnth-branch-72",
+      "ipAddress": "192.168.1.83",
+      "modelVendor": "Vendor 51"
+    },
+    {
+      "kind": "ward",
+      "name": "UBND Kiến Hưng",
+      "gateway": "192.168.1.1",
+      "pointId": "hnth-branch-74",
+      "ipAddress": "192.168.1.82",
+      "modelVendor": "Vendor 52"
+    },
+    {
+      "kind": "ward",
+      "name": "UBND Kiến Minh",
+      "gateway": "192.168.1.1",
+      "pointId": "hnth-branch-9",
+      "ipAddress": "192.168.1.81",
+      "modelVendor": "Vendor 53"
+    },
+    {
+      "kind": "ward",
+      "name": "UBND Kiến Thụy",
+      "gateway": "192.168.1.1",
+      "pointId": "hnth-branch-8",
+      "ipAddress": "192.168.1.80",
+      "modelVendor": "Vendor 54"
+    },
+    {
+      "kind": "ward",
+      "name": "UBND Kim Thành",
+      "gateway": "192.168.1.1",
+      "pointId": "hnth-branch-103",
+      "ipAddress": "192.168.1.79",
+      "modelVendor": "Vendor 55"
+    },
+    {
+      "kind": "ward",
+      "name": "UBND Kinh Môn",
+      "gateway": "192.168.1.1",
+      "pointId": "hnth-branch-52",
+      "ipAddress": "192.168.1.78",
+      "modelVendor": "Vendor 56"
+    },
+    {
+      "kind": "ward",
+      "name": "UBND Lạc Phượng",
+      "gateway": "192.168.1.1",
+      "pointId": "hnth-branch-44",
+      "ipAddress": "192.168.1.77",
+      "modelVendor": "Vendor 57"
+    },
+    {
+      "kind": "ward",
+      "name": "UBND Lai Khê",
+      "gateway": "192.168.1.1",
+      "pointId": "hnth-branch-95",
+      "ipAddress": "192.168.1.76",
+      "modelVendor": "Vendor 58"
+    },
+    {
+      "kind": "ward",
+      "name": "UBND Lê Chân",
+      "gateway": "192.168.1.1",
+      "pointId": "hnth-branch-12",
+      "ipAddress": "192.168.1.75",
+      "modelVendor": "Vendor 59"
+    },
+    {
+      "kind": "ward",
+      "name": "UBND Lê Đại Hành",
+      "gateway": "192.168.1.1",
+      "pointId": "hnth-branch-54",
+      "ipAddress": "192.168.1.74",
+      "modelVendor": "Vendor 60"
+    },
+    {
+      "kind": "ward",
+      "name": "UBND Lê Ích Mộc",
+      "gateway": "192.168.1.1",
+      "pointId": "hnth-branch-5",
+      "ipAddress": "192.168.1.73",
+      "modelVendor": "Vendor 61"
+    },
+    {
+      "kind": "ward",
+      "name": "UBND Lê Thanh Nghị",
+      "gateway": "192.168.1.1",
+      "pointId": "hnth-branch-114",
+      "ipAddress": "192.168.1.72",
+      "modelVendor": "Vendor 62"
+    },
+    {
+      "kind": "ward",
+      "name": "UBND Lưu Kiếm",
+      "gateway": "192.168.1.1",
+      "pointId": "hnth-branch-19",
+      "ipAddress": "192.168.1.71",
+      "modelVendor": "Vendor 63"
+    },
+    {
+      "kind": "ward",
+      "name": "UBND Mao Điền",
+      "gateway": "192.168.1.1",
+      "pointId": "hnth-branch-61",
+      "ipAddress": "192.168.1.70",
+      "modelVendor": "Vendor 64"
+    },
+    {
+      "kind": "ward",
+      "name": "UBND Nam An Phụ",
+      "gateway": "192.168.1.1",
+      "pointId": "hnth-branch-90",
+      "ipAddress": "192.168.1.69",
+      "modelVendor": "Vendor 65"
+    },
+    {
+      "kind": "ward",
+      "name": "UBND Nam Đồ Sơn",
+      "gateway": "192.168.1.1",
+      "pointId": "hnth-branch-73",
+      "ipAddress": "192.168.1.68",
+      "modelVendor": "Vendor 66"
+    },
+    {
+      "kind": "ward",
+      "name": "UBND Nam Đồng",
+      "gateway": "192.168.1.1",
+      "pointId": "hnth-branch-67",
+      "ipAddress": "192.168.1.67",
+      "modelVendor": "Vendor 67"
+    },
+    {
+      "kind": "ward",
+      "name": "UBND Nam Sách",
+      "gateway": "192.168.1.1",
+      "pointId": "hnth-branch-76",
+      "ipAddress": "192.168.1.66",
+      "modelVendor": "Vendor 68"
+    },
+    {
+      "kind": "ward",
+      "name": "UBND Nam Thanh Miện",
+      "gateway": "192.168.1.1",
+      "pointId": "hnth-branch-50",
+      "ipAddress": "192.168.1.65",
+      "modelVendor": "Vendor 69"
+    },
+    {
+      "kind": "ward",
+      "name": "UBND Nam Triệu",
+      "gateway": "192.168.1.1",
+      "pointId": "hnth-branch-81",
+      "ipAddress": "192.168.1.64",
+      "modelVendor": "Vendor 70"
+    },
+    {
+      "kind": "ward",
+      "name": "UBND Nghi Dương",
+      "gateway": "192.168.1.1",
+      "pointId": "hnth-branch-39",
+      "ipAddress": "192.168.1.63",
+      "modelVendor": "Vendor 71"
+    },
+    {
+      "kind": "ward",
+      "name": "UBND Ngô Quyền",
+      "gateway": "192.168.1.1",
+      "pointId": "hnth-branch-84",
+      "ipAddress": "192.168.1.62",
+      "modelVendor": "Vendor 72"
+    },
+    {
+      "kind": "ward",
+      "name": "UBND Nguyễn Bỉnh Khiêm",
+      "gateway": "192.168.1.1",
+      "pointId": "hnth-branch-29",
+      "ipAddress": "192.168.1.61",
+      "modelVendor": "Vendor 73"
+    },
+    {
+      "kind": "ward",
+      "name": "UBND Nguyễn Đại Năng",
+      "gateway": "192.168.1.1",
+      "pointId": "hnth-branch-53",
+      "ipAddress": "192.168.1.60",
+      "modelVendor": "Vendor 74"
+    },
+    {
+      "kind": "ward",
+      "name": "UBND Nguyên Giáp",
+      "gateway": "192.168.1.1",
+      "pointId": "hnth-branch-43",
+      "ipAddress": "192.168.1.59",
+      "modelVendor": "Vendor 75"
+    },
+    {
+      "kind": "ward",
+      "name": "UBND Nguyễn Lương Bằng",
+      "gateway": "192.168.1.1",
+      "pointId": "hnth-branch-100",
+      "ipAddress": "192.168.1.58",
+      "modelVendor": "Vendor 76"
+    },
+    {
+      "kind": "ward",
+      "name": "UBND Nguyễn Trãi",
+      "gateway": "192.168.1.1",
+      "pointId": "hnth-branch-57",
+      "ipAddress": "192.168.1.57",
+      "modelVendor": "Vendor 77"
+    },
+    {
+      "kind": "ward",
+      "name": "UBND Nhị Chiểu",
+      "gateway": "192.168.1.1",
+      "pointId": "hnth-branch-109",
+      "ipAddress": "192.168.1.56",
+      "modelVendor": "Vendor 78"
+    },
+    {
+      "kind": "ward",
+      "name": "UBND Ninh Giang",
+      "gateway": "192.168.1.1",
+      "pointId": "hnth-branch-45",
+      "ipAddress": "192.168.1.55",
+      "modelVendor": "Vendor 79"
+    },
+    {
+      "kind": "ward",
+      "name": "UBND Phạm Sư Mạnh",
+      "gateway": "192.168.1.1",
+      "pointId": "hnth-branch-55",
+      "ipAddress": "192.168.1.54",
+      "modelVendor": "Vendor 80"
+    },
+    {
+      "kind": "ward",
+      "name": "UBND Phù Liễn",
+      "gateway": "192.168.1.1",
+      "pointId": "hnth-branch-3",
+      "ipAddress": "192.168.1.53",
+      "modelVendor": "Vendor 81"
+    },
+    {
+      "kind": "ward",
+      "name": "UBND Phú Thái",
+      "gateway": "192.168.1.1",
+      "pointId": "hnth-branch-111",
+      "ipAddress": "192.168.1.52",
+      "modelVendor": "Vendor 82"
+    },
+    {
+      "kind": "ward",
+      "name": "UBND Quyết Thắng",
+      "gateway": "192.168.1.1",
+      "pointId": "hnth-branch-36",
+      "ipAddress": "192.168.1.51",
+      "modelVendor": "Vendor 83"
+    },
+    {
+      "kind": "ward",
+      "name": "UBND Tân An",
+      "gateway": "192.168.1.1",
+      "pointId": "hnth-branch-47",
+      "ipAddress": "192.168.1.50",
+      "modelVendor": "Vendor 84"
+    },
+    {
+      "kind": "ward",
+      "name": "UBND Tân Hưng",
+      "gateway": "192.168.1.1",
+      "pointId": "hnth-branch-77",
+      "ipAddress": "192.168.1.49",
+      "modelVendor": "Vendor 85"
+    },
+    {
+      "kind": "ward",
+      "name": "UBND Tân Kỳ",
+      "gateway": "192.168.1.1",
+      "pointId": "hnth-branch-99",
+      "ipAddress": "192.168.1.48",
+      "modelVendor": "Vendor 86"
+    },
+    {
+      "kind": "ward",
+      "name": "UBND Tân Minh",
+      "gateway": "192.168.1.1",
+      "pointId": "hnth-branch-26",
+      "ipAddress": "192.168.1.47",
+      "modelVendor": "Vendor 87"
+    },
+    {
+      "kind": "ward",
+      "name": "UBND Thạch Khôi",
+      "gateway": "192.168.1.1",
+      "pointId": "hnth-branch-112",
+      "ipAddress": "192.168.1.46",
+      "modelVendor": "Vendor 88"
+    },
+    {
+      "kind": "ward",
+      "name": "UBND Thái Tân",
+      "gateway": "192.168.1.1",
+      "pointId": "hnth-branch-65",
+      "ipAddress": "192.168.1.45",
+      "modelVendor": "Vendor 89"
+    },
+    {
+      "kind": "ward",
+      "name": "UBND Thành Đông",
+      "gateway": "192.168.1.1",
+      "pointId": "hnth-branch-113",
+      "ipAddress": "192.168.1.44",
+      "modelVendor": "Vendor 90"
+    },
+    {
+      "kind": "ward",
+      "name": "UBND Thanh Hà",
+      "gateway": "192.168.1.1",
+      "pointId": "hnth-branch-88",
+      "ipAddress": "192.168.1.43",
+      "modelVendor": "Vendor 91"
+    },
+    {
+      "kind": "ward",
+      "name": "UBND Thanh Miện",
+      "gateway": "192.168.1.1",
+      "pointId": "hnth-branch-102",
+      "ipAddress": "192.168.1.42",
+      "modelVendor": "Vendor 92"
+    },
+    {
+      "kind": "ward",
+      "name": "UBND Thiên Hương",
+      "gateway": "192.168.1.1",
+      "pointId": "hnth-branch-7",
+      "ipAddress": "192.168.1.41",
+      "modelVendor": "Vendor 93"
+    },
+    {
+      "kind": "ward",
+      "name": "UBND Thủy Nguyên",
+      "gateway": "192.168.1.1",
+      "pointId": "hnth-branch-82",
+      "ipAddress": "192.168.1.40",
+      "modelVendor": "Vendor 94"
+    },
+    {
+      "kind": "ward",
+      "name": "UBND Thượng Hồng",
+      "gateway": "192.168.1.1",
+      "pointId": "hnth-branch-51",
+      "ipAddress": "192.168.1.39",
+      "modelVendor": "Vendor 95"
+    },
+    {
+      "kind": "ward",
+      "name": "UBND Tiên Lãng",
+      "gateway": "192.168.1.1",
+      "pointId": "hnth-branch-24",
+      "ipAddress": "192.168.1.38",
+      "modelVendor": "Vendor 96"
+    },
+    {
+      "kind": "ward",
+      "name": "UBND Tiên Minh",
+      "gateway": "192.168.1.1",
+      "pointId": "hnth-branch-25",
+      "ipAddress": "192.168.1.37",
+      "modelVendor": "Vendor 97"
+    },
+    {
+      "kind": "ward",
+      "name": "UBND Trần Hưng Đạo",
+      "gateway": "192.168.1.1",
+      "pointId": "hnth-branch-56",
+      "ipAddress": "192.168.1.36",
+      "modelVendor": "Vendor 98"
+    },
+    {
+      "kind": "ward",
+      "name": "UBND Trần Liễu",
+      "gateway": "192.168.1.1",
+      "pointId": "hnth-branch-87",
+      "ipAddress": "192.168.1.15",
+      "modelVendor": "Vendor 99"
+    },
+    {
+      "kind": "ward",
+      "name": "UBND Trần Nhân Tông",
+      "gateway": "192.168.1.1",
+      "pointId": "hnth-branch-58",
+      "ipAddress": "192.168.1.14",
+      "modelVendor": "Vendor 100"
+    },
+    {
+      "kind": "ward",
+      "name": "UBND Trần Phú",
+      "gateway": "192.168.1.1",
+      "pointId": "hnth-branch-105",
+      "ipAddress": "192.168.1.13",
+      "modelVendor": "Vendor 101"
+    },
+    {
+      "kind": "ward",
+      "name": "UBND Trường Tân",
+      "gateway": "192.168.1.1",
+      "pointId": "hnth-branch-101",
+      "ipAddress": "192.168.1.12",
+      "modelVendor": "Vendor 102"
+    },
+    {
+      "kind": "ward",
+      "name": "UBND Tuệ Tĩnh",
+      "gateway": "192.168.1.1",
+      "pointId": "hnth-branch-79",
+      "ipAddress": "192.168.1.11",
+      "modelVendor": "Vendor 103"
+    },
+    {
+      "kind": "ward",
+      "name": "UBND Tứ Kỳ",
+      "gateway": "192.168.1.1",
+      "pointId": "hnth-branch-98",
+      "ipAddress": "192.168.1.10",
+      "modelVendor": "Vendor 104"
+    },
+    {
+      "kind": "ward",
+      "name": "UBND Tứ Minh",
+      "gateway": "192.168.1.1",
+      "pointId": "hnth-branch-66",
+      "ipAddress": "192.168.1.9",
+      "modelVendor": "Vendor 105"
+    },
+    {
+      "kind": "ward",
+      "name": "UBND Việt Hòa",
+      "gateway": "192.168.1.1",
+      "pointId": "hnth-branch-80",
+      "ipAddress": "192.168.1.8",
+      "modelVendor": "Vendor 106"
+    },
+    {
+      "kind": "ward",
+      "name": "UBND Việt Khê",
+      "gateway": "192.168.1.1",
+      "pointId": "hnth-branch-4",
+      "ipAddress": "192.168.1.7",
+      "modelVendor": "Vendor 107"
+    },
+    {
+      "kind": "ward",
+      "name": "UBND Vĩnh Am",
+      "gateway": "192.168.1.1",
+      "pointId": "hnth-branch-30",
+      "ipAddress": "192.168.1.6",
+      "modelVendor": "Vendor 108"
+    },
+    {
+      "kind": "ward",
+      "name": "UBND Vĩnh Bảo",
+      "gateway": "192.168.1.1",
+      "pointId": "hnth-branch-21",
+      "ipAddress": "192.168.1.5",
+      "modelVendor": "Vendor 109"
+    },
+    {
+      "kind": "ward",
+      "name": "UBND Vĩnh Hải",
+      "gateway": "192.168.1.1",
+      "pointId": "hnth-branch-28",
+      "ipAddress": "192.168.1.4",
+      "modelVendor": "Vendor 110"
+    },
+    {
+      "kind": "ward",
+      "name": "UBND Vĩnh Hòa",
+      "gateway": "192.168.1.1",
+      "pointId": "hnth-branch-23",
+      "ipAddress": "192.168.1.3",
+      "modelVendor": "Vendor 111"
+    },
+    {
+      "kind": "ward",
+      "name": "UBND Vĩnh Lại",
+      "gateway": "192.168.1.1",
+      "pointId": "hnth-branch-46",
+      "ipAddress": "192.168.1.2",
+      "modelVendor": "Vendor 112"
+    },
+    {
+      "kind": "ward",
+      "name": "UBND Vĩnh Thịnh",
+      "gateway": "192.168.1.1",
+      "pointId": "hnth-branch-22",
+      "ipAddress": "192.168.1.135",
+      "modelVendor": "Vendor 113"
+    },
+    {
+      "kind": "ward",
+      "name": "UBND Vĩnh Thuận",
+      "gateway": "192.168.1.1",
+      "pointId": "hnth-branch-37",
+      "ipAddress": "192.168.1.0",
+      "modelVendor": "Vendor 114"
+    },
+    {
+      "kind": "ward",
+      "name": "UBND Yết Kiêu",
+      "gateway": "192.168.1.1",
+      "pointId": "hnth-branch-40",
+      "ipAddress": "192.168.1.16",
+      "modelVendor": "Vendor 115"
+    },
+    {
+      "kind": "extra",
+      "name": "Sở Khoa học và Công nghệ",
+      "gateway": "192.168.1.1",
+      "pointId": "hnth-extra-so-khoa-hoc-va-cong-nghe",
+      "ipAddress": "192.168.1.170",
+      "modelVendor": "Vendor 116"
+    },
+    {
+      "kind": "extra",
+      "name": "Sở Văn hóa và Du lịch",
+      "gateway": "192.168.1.1",
+      "pointId": "hnth-extra-so-van-hoa-va-du-lich",
+      "ipAddress": "192.168.1.171",
+      "modelVendor": "Vendor 117"
+    },
+    {
+      "kind": "extra",
+      "name": "Sở Nông nghiệp và Môi trường",
+      "gateway": "192.168.1.1",
+      "pointId": "hnth-extra-so-nong-nghiep-va-moi-truong",
+      "ipAddress": "192.168.1.172",
+      "modelVendor": "Vendor 118"
+    },
+    {
+      "kind": "extra",
+      "name": "Sở Tài chính",
+      "gateway": "192.168.1.1",
+      "pointId": "hnth-extra-so-tai-chinh",
+      "ipAddress": "192.168.1.173",
+      "modelVendor": "Vendor 119"
+    },
+    {
+      "kind": "extra",
+      "name": "Sở Công Thương",
+      "gateway": "192.168.1.1",
+      "pointId": "hnth-extra-so-cong-thuong",
+      "ipAddress": "192.168.1.174",
+      "modelVendor": "Vendor 120"
+    },
+    {
+      "kind": "extra",
+      "name": "Sở Ngoại Vụ",
+      "gateway": "192.168.1.1",
+      "pointId": "hnth-extra-so-ngoai-vu",
+      "ipAddress": "192.168.1.175",
+      "modelVendor": "Vendor 121"
+    },
+    {
+      "kind": "extra",
+      "name": "Sở Nội Vụ",
+      "gateway": "192.168.1.1",
+      "pointId": "hnth-extra-so-noi-vu",
+      "ipAddress": "192.168.1.176",
+      "modelVendor": "Vendor 122"
+    },
+    {
+      "kind": "extra",
+      "name": "Sở Y Tế",
+      "gateway": "192.168.1.1",
+      "pointId": "hnth-extra-so-y-te",
+      "ipAddress": "192.168.1.177",
+      "modelVendor": "Vendor 123"
+    },
+    {
+      "kind": "extra",
+      "name": "Sở Giáo Dục và Đào Tạo",
+      "gateway": "192.168.1.1",
+      "pointId": "hnth-extra-so-giao-duc-va-dao-tao",
+      "ipAddress": "192.168.1.178",
+      "modelVendor": "Vendor 124"
+    },
+    {
+      "kind": "extra",
+      "name": "Ban Quản lý các KKT",
+      "gateway": "192.168.1.1",
+      "pointId": "hnth-extra-ban-quan-ly-cac-kkt",
+      "ipAddress": "192.168.1.179",
+      "modelVendor": "Vendor 125"
+    },
+    {
+      "kind": "extra",
+      "name": "Vườn Quốc Gia Cát Bà",
+      "gateway": "192.168.1.1",
+      "pointId": "hnth-extra-vuon-quoc-gia-cat-ba",
+      "ipAddress": "192.168.1.180",
+      "modelVendor": "Vendor 126"
+    }
+  ],
+  "rosters": [
+    {
+      "name": "UBND - Xã/Phường/Đặc khu",
+      "pointIds": [
+        "hnth-hub",
+        "hnth-branch-110",
+        "hnth-branch-13",
+        "hnth-branch-20",
+        "hnth-branch-2",
+        "hnth-branch-38",
+        "hnth-branch-35",
+        "hnth-branch-33",
+        "hnth-branch-31",
+        "hnth-branch-89",
+        "hnth-branch-34",
+        "hnth-branch-93",
+        "hnth-branch-32",
+        "hnth-branch-18",
+        "hnth-branch-1",
+        "hnth-branch-108",
+        "hnth-branch-42",
+        "hnth-branch-62",
+        "hnth-branch-69",
+        "hnth-branch-59",
+        "hnth-branch-64",
+        "hnth-branch-27",
+        "hnth-branch-107",
+        "hnth-branch-97",
+        "hnth-branch-106",
+        "hnth-branch-75",
+        "hnth-branch-92",
+        "hnth-branch-70",
+        "hnth-branch-83",
+        "hnth-branch-63",
+        "hnth-branch-68",
+        "hnth-branch-78",
+        "hnth-branch-14",
+        "hnth-branch-96",
+        "hnth-branch-86",
+        "hnth-branch-94",
+        "hnth-branch-91",
+        "hnth-branch-11",
+        "hnth-branch-85",
+        "hnth-branch-41",
+        "hnth-branch-17",
+        "hnth-branch-6",
+        "hnth-branch-15",
+        "hnth-branch-49",
+        "hnth-branch-104",
+        "hnth-branch-71",
+        "hnth-branch-16",
+        "hnth-branch-60",
+        "hnth-branch-48",
+        "hnth-branch-10",
+        "hnth-branch-72",
+        "hnth-branch-74",
+        "hnth-branch-9",
+        "hnth-branch-8",
+        "hnth-branch-103",
+        "hnth-branch-52",
+        "hnth-branch-44",
+        "hnth-branch-95",
+        "hnth-branch-12",
+        "hnth-branch-54",
+        "hnth-branch-5",
+        "hnth-branch-114",
+        "hnth-branch-19",
+        "hnth-branch-61",
+        "hnth-branch-90",
+        "hnth-branch-73",
+        "hnth-branch-67",
+        "hnth-branch-76",
+        "hnth-branch-50",
+        "hnth-branch-81",
+        "hnth-branch-39",
+        "hnth-branch-84",
+        "hnth-branch-29",
+        "hnth-branch-53",
+        "hnth-branch-43",
+        "hnth-branch-100",
+        "hnth-branch-57",
+        "hnth-branch-109",
+        "hnth-branch-45",
+        "hnth-branch-55",
+        "hnth-branch-3",
+        "hnth-branch-111",
+        "hnth-branch-36",
+        "hnth-branch-47",
+        "hnth-branch-77",
+        "hnth-branch-99",
+        "hnth-branch-26",
+        "hnth-branch-112",
+        "hnth-branch-65",
+        "hnth-branch-113",
+        "hnth-branch-88",
+        "hnth-branch-102",
+        "hnth-branch-7",
+        "hnth-branch-82",
+        "hnth-branch-51",
+        "hnth-branch-24",
+        "hnth-branch-25",
+        "hnth-branch-56",
+        "hnth-branch-87",
+        "hnth-branch-58",
+        "hnth-branch-105",
+        "hnth-branch-101",
+        "hnth-branch-79",
+        "hnth-branch-98",
+        "hnth-branch-66",
+        "hnth-branch-80",
+        "hnth-branch-4",
+        "hnth-branch-30",
+        "hnth-branch-21",
+        "hnth-branch-28",
+        "hnth-branch-23",
+        "hnth-branch-46",
+        "hnth-branch-22",
+        "hnth-branch-37",
+        "hnth-branch-40"
+      ]
+    }
+  ],
+  "activeRoster": null
+}

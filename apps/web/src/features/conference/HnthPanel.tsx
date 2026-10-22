@@ -4,15 +4,18 @@ import { MONITOR_LEASE_RENEW_SECONDS } from "@haiphong-ops/hnth-protocol";
 import { useAppStore } from "../../core/store";
 import { agentsApi, hnthApi } from "../../core/api/clients";
 import { emitAppEvent, onAppEvent } from "../../core/events";
-import { useHnthLiveStore } from "../../core/realtime/hnth-live-store";
-import { applyHnthPointOverrides, HNTH_LAYER_ID, loadHnthDemoLayer, normalizeHnthStatus, type HnthConnectionStatus, type HnthPointOverride } from "../layers/hnth-data-provider";
+import { useHnthLiveStore, type HnthRosterPoint } from "../../core/realtime/hnth-live-store";
+import { composeHnthLayer, HNTH_LAYER_ID, loadHnthDemoLayer, normalizeHnthStatus, type HnthConnectionStatus, type HnthPointOverride } from "../layers/hnth-data-provider";
 import { HnthAgentSelector } from "./HnthAgentSelector";
 import { HnthDeviceInfoModal } from "./HnthDeviceInfoModal";
 import { HnthPointConfigForm } from "./HnthPointConfigForm";
+import { HnthRosterControl } from "./HnthRosterControl";
+import type { CatalogDraft } from "./HnthCatalogEditor";
+import { classifyImportRows, rosterFromLayerPoints, type WardRef } from "./hnth-roster";
 import { HnthPointList } from "./HnthPointList";
 import { HnthStatusStyleEditor } from "./HnthStatusStyleEditor";
 import { exportHnthPointsXlsx, readHnthImportFile, type HnthImportRow } from "./hnth-import-export";
-import type { DiscoveredIp, HnthAgentRecord, HnthAssignedPoint, HnthLiveAgent, HnthPointFeature } from "./hnth-types";
+import type { DiscoveredIp, HnthAgentRecord, HnthLiveAgent, HnthPointFeature } from "./hnth-types";
 import { useHnthLiveSync } from "./useHnthLiveSync";
 
 
@@ -218,12 +221,32 @@ export function HnthPanel({ readOnly = false, canRenewLease = !readOnly }: { rea
     // bản đồ và chu kỳ khôi phục các lớp đã lưu diễn ra đồng thời.
     void loadHnthDemoLayer().then((loadedLayer) => {
       if (!cancelled) {
-        mergeOperationalLayers([applyHnthPointOverrides(loadedLayer, hnthPointOverrides)]);
+        mergeOperationalLayers([composeHnthLayer(loadedLayer, hnthPointOverrides, useHnthLiveStore.getState().catalog, useHnthLiveStore.getState().activeRoster)]);
         emitAppEvent("hnth:layer-ready");
       }
     }).catch(() => undefined);
     return () => { cancelled = true; };
   }, [isDataLayerVisible, points.length, mergeOperationalLayers, hnthPointOverrides]);
+
+  // Đổi/sửa danh sách phiên họp (từ máy này hoặc máy khác qua realtime): dựng lại lớp HNTH
+  // theo danh sách mới rồi phát layer-ready để trạng thái mới nhất từ backend được áp lại.
+  const catalog = useHnthLiveStore((state) => state.catalog);
+  const activeRoster = useHnthLiveStore((state) => state.activeRoster);
+  const appliedSessionRef = useRef<{ catalog: typeof catalog; roster: typeof activeRoster } | null>(null);
+  useEffect(() => {
+    const previous = appliedSessionRef.current;
+    appliedSessionRef.current = { catalog, roster: activeRoster };
+    // Lần đầu chưa có dữ liệu chủ thì lớp mặc định đã đúng, không cần dựng lại.
+    if (!previous && !catalog) return;
+    if (previous && previous.catalog === catalog && previous.roster === activeRoster) return;
+    let cancelled = false;
+    void loadHnthDemoLayer().then((baseLayer) => {
+      if (cancelled) return;
+      mergeOperationalLayers([composeHnthLayer(baseLayer, useAppStore.getState().hnthPointOverrides, catalog, activeRoster)]);
+      emitAppEvent("hnth:layer-ready");
+    }).catch(() => undefined);
+    return () => { cancelled = true; };
+  }, [catalog, activeRoster, mergeOperationalLayers]);
 
   // Ctrl+Enter: bật/tắt Giám sát liên tục giống gạt switch. Chỉ trang có quyền điều khiển
   // (không readOnly: Guest/Viewer/Trình chiếu không có). Ref giữ hàm mới nhất vì setMonitoring
@@ -350,41 +373,41 @@ export function HnthPanel({ readOnly = false, canRenewLease = !readOnly }: { rea
 
   const exportPointConfig = () => void exportHnthPointsXlsx(points);
 
+  // Import = đọc file thành dữ liệu chủ điểm cầu (xã/phường, Trung tâm, Sở/Ban/Ngành) rồi mở
+  // popup để xem lại và lưu; các danh sách phiên họp chọn điểm từ dữ liệu chủ này.
+  const [catalogDraft, setCatalogDraft] = useState<CatalogDraft | null>(null);
+  const [wardRefs, setWardRefs] = useState<WardRef[]>([]);
+  useEffect(() => {
+    void loadHnthDemoLayer().then((baseLayer) => setWardRefs(baseLayer.data.features
+      .filter((item) => item.geometry.type === "Point" && item.properties?.role === "branch")
+      .map((item) => ({ pointId: String(item.properties?.pointId ?? ""), name: String(item.properties?.name ?? "") })))).catch(() => undefined);
+  }, []);
+  // Chưa từng Import: 115 điểm đang hiển thị (IP lấy từ backend) làm dữ liệu chủ ban đầu, Trung tâm đứng đầu.
+  const hasCatalog = useHnthLiveStore((state) => Boolean(state.catalog?.points.length));
+  const fallbackCatalog = useMemo(() => hasCatalog ? [] : rosterFromLayerPoints(points).sort((a, b) => Number(b.kind === "hub") - Number(a.kind === "hub")), [hasCatalog, points]);
+
   const importPointConfig = async (file: File) => {
     try {
       const imported: HnthImportRow[] = await readHnthImportFile(file);
-      const byName = new globalThis.Map(imported.map((row) => [row.name.trim().toLocaleLowerCase("vi"), row]));
-      const currentPoints = points;
-      const updates = currentPoints.map((point) => {
-        const pointId = String(point.properties?.pointId ?? point.id ?? "");
-        const name = String(point.properties?.name ?? "").trim();
-        const row = byName.get(name.toLocaleLowerCase("vi"));
-        return row && pointId ? { pointId, row } : null;
-      }).filter((item): item is { pointId: string; row: HnthImportRow } => Boolean(item));
-      if (!updates.length) throw new Error("Không tìm thấy Tên điểm nào khớp với danh sách hiện tại.");
-      for (const { pointId, row } of updates) {
-        const values = { ipAddress: row.ipAddress, gateway: row.gateway, model: row.modelVendor };
-        updateHnthPoint(pointId, { ...values, status: "unknown" });
-        await hnthApi.pointConfig({ pointId, ipAddress: row.ipAddress, modelVendor: row.modelVendor || undefined, agentId: selectedAgentId });
-      }
-      const selectedAgent = agents.find((agent) => agent.agentId === selectedAgentId);
-      const assignedPoints: HnthAssignedPoint[] = updates
-        .filter(({ row }) => row.ipAddress)
-        .map(({ pointId, row }) => ({ pointId, name: row.name, ipAddress: row.ipAddress, modelVendor: row.modelVendor }));
-      if (selectedAgent && !readOnly) {
-        const existingConfig = selectedAgent.monitorConfig || {};
-        const saved = await agentsApi.update(selectedAgentId, { name: selectedAgent.name, heartbeatSeconds: selectedAgent.heartbeatSeconds || 30, monitorConfig: { ...existingConfig, points: assignedPoints } });
-        if (!saved.ok) throw new Error(`Không lưu được danh sách điểm cho Agent (${saved.status}).`);
-        setAgents((current) => current.map((agent) => agent.agentId === selectedAgentId ? { ...agent, monitorConfig: { ...existingConfig, points: assignedPoints } } : agent));
-      }
-      if (continuousMonitoring) {
-        const monitorPoints = assignedPoints.map((item) => ({ pointId: item.pointId, ipAddress: item.ipAddress, name: item.name, modelVendor: item.modelVendor }));
-        await hnthApi.setMonitoring({ enabled: true, concurrency: pingConcurrency, waitSeconds: monitorWaitSeconds, agentId: selectedAgentId, points: monitorPoints });
-      }
-      window.alert(`Đã nhập và cập nhật ${updates.length}/${imported.length} điểm HNTH.`);
+      const { points: rosterPoints, report } = classifyImportRows(imported, wardRefs);
+      if (!rosterPoints.length) throw new Error("File không có dòng Tên điểm nào.");
+      setCatalogDraft({ points: rosterPoints, report });
     } catch (error) {
       window.alert(error instanceof Error ? error.message : "Không thể nhập file cấu hình HNTH.");
     }
+  };
+
+  // Sau khi áp dụng/sửa danh sách đang dùng: tải lại phân công Agent và bắt đầu lại giám sát theo điểm mới.
+  const restartMonitoringForRoster = async (rosterPoints: HnthRosterPoint[] | null) => {
+    const response = await agentsApi.list().catch(() => null);
+    if (response?.ok) setAgents(await response.json() as HnthAgentRecord[]);
+    const monitorPoints = rosterPoints
+      ? rosterPoints.filter((point) => point.ipAddress).map((point) => ({ pointId: point.pointId, ipAddress: point.ipAddress, name: point.name, modelVendor: point.modelVendor }))
+      : rosterFromLayerPoints(composeHnthLayer(await loadHnthDemoLayer(), useAppStore.getState().hnthPointOverrides, null, null).data.features
+        .filter((item): item is HnthPointFeature => item.geometry.type === "Point")).filter((point) => point.ipAddress)
+        .map((point) => ({ pointId: point.pointId, ipAddress: point.ipAddress, name: point.name, modelVendor: point.modelVendor }));
+    resetHnthStatusesForNewMonitoring();
+    await hnthApi.setMonitoring({ enabled: true, concurrency: pingConcurrency, waitSeconds: monitorWaitSeconds, agentId: selectedAgentId, points: monitorPoints });
   };
 
   return (
@@ -425,6 +448,7 @@ export function HnthPanel({ readOnly = false, canRenewLease = !readOnly }: { rea
         onShowInfo={() => setModal("info")}
         onImport={importPointConfig}
         onExport={exportPointConfig}
+        rosterSlot={<HnthRosterControl readOnly={readOnly} wards={wardRefs} fallbackCatalog={fallbackCatalog} catalogDraft={catalogDraft} setCatalogDraft={setCatalogDraft} onApplied={restartMonitoringForRoster} />}
       />}
 
       <HnthAgentSelector

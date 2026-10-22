@@ -7,7 +7,7 @@
 // - Trạng thái backend/agent/giám sát được ghi vào useHnthLiveStore trước khi
 //   gọi listener, để listener đồng bộ thấy trạng thái mới (thứ tự như event cũ).
 import { hnthApi } from "../api/clients";
-import { useHnthLiveStore } from "./hnth-live-store";
+import { useHnthLiveStore, type HnthCatalog, type HnthRoster } from "./hnth-live-store";
 
 type AgentSummary = { agentId?: string; name?: string; status?: string; version?: string | null };
 type MonitoringPayload = { enabled?: boolean; concurrency?: number; waitSeconds?: number; agentId?: string };
@@ -21,6 +21,8 @@ export type HnthLivePayload = {
   agents?: AgentSummary[];
   results?: unknown;
   monitorBatch?: MonitorBatch;
+  catalog?: HnthCatalog | null;
+  activeRoster?: HnthRoster | null;
 };
 
 export type SnapshotResult = { ok: true; payload: HnthLivePayload } | { ok: false; payload: null };
@@ -35,6 +37,14 @@ let pollIntervalMs = 0;
 let inFlight: Promise<void> | null = null;
 let source: EventSource | null = null;
 let visibilityBound = false;
+
+function applyRoster(payload: HnthLivePayload) {
+  // Payload cũ (backend chưa nâng cấp) không có khóa này: giữ nguyên danh sách hiện tại.
+  if (!("activeRoster" in payload)) return;
+  const catalog = payload.catalog && Array.isArray(payload.catalog.points) ? payload.catalog : null;
+  const roster = payload.activeRoster && Array.isArray(payload.activeRoster.pointIds) ? payload.activeRoster : null;
+  useHnthLiveStore.getState().setSessionPoints(catalog, roster);
+}
 
 function applyMonitoring(monitoring: MonitoringPayload | undefined) {
   if (!monitoring) return;
@@ -61,6 +71,7 @@ async function fetchSnapshot() {
     if (response.ok && payload) {
       applySelectedAgent(payload, true);
       applyMonitoring(payload.monitoring);
+      applyRoster(payload);
       result = { ok: true, payload };
     } else {
       // Backend lỗi thì không biết agent còn sống: hiển thị mất kết nối như trước.
@@ -95,6 +106,7 @@ function handleStreamMessage(event: MessageEvent<string>) {
   let payload: HnthLivePayload;
   try { payload = JSON.parse(event.data) as HnthLivePayload; } catch { return; /* bỏ qua sự kiện lỗi định dạng */ }
   applyMonitoring(payload.monitoring);
+  applyRoster(payload);
   applySelectedAgent(payload, true);
   for (const listener of [...streamListeners]) {
     try { listener(payload); } catch (error) { console.error(error); }

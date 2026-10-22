@@ -42,7 +42,7 @@ export function createRealtime(config) {
   async function currentState() {
     // Kiểm tra lease ngay khi đọc để không trả cờ "đang giám sát" đã hết hạn.
     if (await expireMonitorLease()) setImmediate(() => void broadcastState());
-    const monitor = await pool.query("SELECT enabled,agent_id AS \"agentId\",concurrency,wait_seconds AS \"waitSeconds\",session_id AS \"sessionId\",started_at AS \"startedAt\",updated_at AS \"updatedAt\",lease_expires_at AS \"leaseExpiresAt\",revision FROM monitor_state WHERE id=1");
+    const monitor = await pool.query("SELECT active_roster_id AS \"activeRosterId\",enabled,agent_id AS \"agentId\",concurrency,wait_seconds AS \"waitSeconds\",session_id AS \"sessionId\",started_at AS \"startedAt\",updated_at AS \"updatedAt\",lease_expires_at AS \"leaseExpiresAt\",revision FROM monitor_state WHERE id=1");
     const row = monitor.rows[0] || { enabled: false, agentId: config.defaultAgentId, concurrency: 1, waitSeconds: 3, sessionId: null, startedAt: null, updatedAt: null, leaseExpiresAt: null, revision: 0 };
     const [agentConfig, agents] = await Promise.all([
       pool.query("SELECT monitor_config AS \"monitorConfig\" FROM agents WHERE agent_id=$1", [row.agentId]),
@@ -55,8 +55,12 @@ export function createRealtime(config) {
     const endpoints = assignedPointIds
       ? await pool.query(`SELECT ${ENDPOINT_COLUMNS} FROM endpoints WHERE enabled=true AND endpoint_id = ANY($1::text[]) ORDER BY endpoint_id`, [assignedPointIds])
       : await pool.query(`SELECT ${ENDPOINT_COLUMNS} FROM endpoints WHERE enabled=true AND endpoint_id LIKE 'hnth-%' ORDER BY endpoint_id`);
+    // Dữ liệu chủ điểm cầu + danh sách của phiên (công khai để Guest/Trình chiếu thấy cùng tên và điểm Sở/Ban/Ngành).
+    const catalogRow = (await pool.query("SELECT points,updated_at AS \"updatedAt\" FROM hnth_catalog WHERE id=1")).rows[0];
+    const catalog = catalogRow ? { points: catalogRow.points, updatedAt: catalogRow.updatedAt } : null;
+    const activeRoster = row.activeRosterId ? (await pool.query("SELECT id,name,point_ids AS \"pointIds\",updated_at AS \"updatedAt\" FROM hnth_rosters WHERE id=$1", [row.activeRosterId])).rows[0] ?? null : null;
     const now = Date.now();
-    return { monitoring: row, assignedPointIds, results: endpoints.rows, agents: agents.rows.map((agent) => withLiveStatus(agent, now)) };
+    return { monitoring: row, catalog, activeRoster, assignedPointIds, results: endpoints.rows, agents: agents.rows.map((agent) => withLiveStatus(agent, now)) };
   }
 
   function broadcast(event) {

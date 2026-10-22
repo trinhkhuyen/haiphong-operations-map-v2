@@ -5,7 +5,8 @@ import { useAppStore } from "../core/store";
 import { emitAppEvent } from "../core/events";
 import type { OperationalLayer } from "../core/types";
 import { loadAdministrativeUnits } from "../features/administrative/data-provider";
-import { applyHnthPointOverrides, HNTH_LAYER_ID, loadHnthDemoLayer } from "../features/layers/hnth-data-provider";
+import { composeHnthLayer, HNTH_LAYER_ID, loadHnthDemoLayer } from "../features/layers/hnth-data-provider";
+import { useHnthLiveStore } from "../core/realtime/hnth-live-store";
 import { loadOsmOperationalLayers } from "../features/layers/osm-data-provider";
 import { loadBundledOperationalLayers } from "../features/layers/sample-data";
 
@@ -74,7 +75,7 @@ export function useOperationalLayerLoader() {
           osmLayers = await loadOsmOperationalLayers(units, osmIds);
         }
         const derivedLayers = pendingIds.includes(HNTH_LAYER_ID)
-          ? [applyHnthPointOverrides(await loadHnthDemoLayer(), useAppStore.getState().hnthPointOverrides)]
+          ? [composeHnthLayer(await loadHnthDemoLayer(), useAppStore.getState().hnthPointOverrides, useHnthLiveStore.getState().catalog, useHnthLiveStore.getState().activeRoster)]
           : [];
         useAppStore.getState().mergeOperationalLayers([...bundledLayers, ...osmLayers, ...derivedLayers]);
         // HnthPanel có thể đã nhận snapshot backend trước khi lớp HNTH được

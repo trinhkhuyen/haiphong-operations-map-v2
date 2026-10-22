@@ -207,7 +207,7 @@ describe("hnth-backend e2e", { skip: skipReason }, () => {
     assert.equal(failed.status, 500);
     assert.deepEqual(failed.body, { error: "internal error" });
 
-    assert.deepEqual((await db.query("SELECT version,name FROM schema_migrations ORDER BY version")).rows, [{ version: 1, name: "baseline" }, { version: 2, name: "monitor-lease" }]);
+    assert.deepEqual((await db.query("SELECT version,name FROM schema_migrations ORDER BY version")).rows, [{ version: 1, name: "baseline" }, { version: 2, name: "monitor-lease" }, { version: 3, name: "hnth-rosters" }, { version: 4, name: "hnth-catalog" }]);
   });
 
   it("10. xóa agent: từ chối khi online, xóa khi offline", async () => {
@@ -235,5 +235,47 @@ describe("hnth-backend e2e", { skip: skipReason }, () => {
     assert.equal((await monitorState()).monitoring.enabled, false, "đọc trạng thái thì lease hết hạn bị tắt");
     assert.equal((await api("POST", "/api/hnth/monitor/lease", { token: adminToken })).body.renewed, false, "không gia hạn phiên đã tắt");
     await waitFor(() => agentA.output().includes("monitoring lease expired"), { message: "agent A dừng vì hết lease" });
+  });
+
+  it("12. dữ liệu chủ điểm cầu + danh sách phiên họp: chọn điểm, áp dụng, đồng bộ Agent, Import lại cắt bớt danh sách", async () => {
+    const catalog = [
+      { pointId: "hnth-hub", kind: "hub", name: "Trung tâm Chính trị - Hành chính", ipAddress: "10.9.0.1" },
+      { pointId: "hnth-branch-1", kind: "ward", name: "UBND Ái Quốc", ipAddress: "" },
+      { pointId: "hnth-extra-so-y-te", kind: "extra", name: "Sở Y tế", ipAddress: "10.9.0.2" },
+      { pointId: "hnth-extra-cong-an", kind: "extra", name: "Công an TP", ipAddress: "10.9.0.4" },
+    ];
+    assert.equal((await api("PUT", "/api/hnth/catalog", { body: { points: catalog } })).status, 401);
+    assert.equal((await api("PUT", "/api/hnth/catalog", { token: adminToken, body: { points: [{ ...catalog[0], ipAddress: "x" }] } })).status, 400);
+    const imported = await api("PUT", "/api/hnth/catalog", { token: adminToken, body: { points: catalog } });
+    assert.equal(imported.body.pointCount, 4, `${imported.status} ${JSON.stringify(imported.body)}
+${backend.output().slice(-1500)}`);
+    assert.equal((await api("POST", "/api/hnth/rosters", { token: adminToken, body: { name: "Họp khối Sở", pointIds: ["hnth-extra-khong-co"] } })).status, 400);
+    const created = await api("POST", "/api/hnth/rosters", { token: adminToken, body: { name: "Họp khối Sở", pointIds: ["hnth-hub", "hnth-branch-1", "hnth-extra-so-y-te"] } });
+    assert.equal(created.status, 201);
+    assert.equal(created.body.pointCount, 3);
+    assert.equal((await api("POST", "/api/hnth/rosters", { token: adminToken, body: { name: "Họp khối Sở", pointIds: ["hnth-hub"] } })).status, 409);
+    const id = created.body.id;
+    assert.equal((await api("POST", `/api/hnth/rosters/${id}/activate`, { token: adminToken })).status, 200);
+    const state = await monitorState();
+    assert.equal(state.activeRoster.name, "Họp khối Sở");
+    assert.equal(state.catalog.points.length, 4, "snapshot công khai có dữ liệu chủ");
+    const agentId = state.monitoring.agentId;
+    const assigned = async () => (await db.query("SELECT monitor_config->'points' AS p FROM agents WHERE agent_id=$1", [agentId])).rows[0].p?.map((item) => item.pointId).sort();
+    assert.deepEqual(await assigned(), ["hnth-extra-so-y-te", "hnth-hub"], "Agent chỉ nhận điểm của danh sách, có IP; không nhận Công an (ngoài danh sách)");
+    assert.equal((await db.query("SELECT name FROM endpoints WHERE endpoint_id='hnth-extra-so-y-te'")).rows[0].name, "Sở Y tế");
+    assert.equal((await api("DELETE", `/api/hnth/rosters/${id}`, { token: adminToken })).status, 409, "không xóa danh sách đang áp dụng");
+    assert.equal((await api("POST", "/api/hnth/point-config", { token: adminToken, body: { pointId: "hnth-branch-1", ipAddress: "10.9.0.3", agentId } })).status, 202);
+    assert.equal((await monitorState()).catalog.points.find((item) => item.pointId === "hnth-branch-1").ipAddress, "10.9.0.3", "IP sửa ở Cấu hình điểm ghi vào dữ liệu chủ");
+    const renamed = await api("PUT", `/api/hnth/rosters/${id}`, { token: adminToken, body: { name: "Họp khối Sở (sửa)", pointIds: ["hnth-hub", "hnth-branch-1"] } });
+    assert.equal(renamed.body.active, true);
+    assert.equal((await monitorState()).activeRoster.name, "Họp khối Sở (sửa)");
+    assert.deepEqual(await assigned(), ["hnth-branch-1", "hnth-hub"]);
+    const reimported = await api("PUT", "/api/hnth/catalog", { token: adminToken, body: { points: catalog.filter((item) => item.pointId !== "hnth-branch-1") } });
+    assert.deepEqual(reimported.body.prunedRosters, ["Họp khối Sở (sửa)"]);
+    assert.deepEqual((await monitorState()).activeRoster.pointIds, ["hnth-hub"]);
+    assert.equal((await api("POST", "/api/hnth/rosters/default/activate", { token: adminToken })).status, 200);
+    assert.equal((await monitorState()).activeRoster, null);
+    assert.deepEqual(await assigned(), ["hnth-extra-cong-an", "hnth-extra-so-y-te", "hnth-hub"], "không chọn danh sách = toàn bộ dữ liệu chủ có IP");
+    assert.equal((await api("DELETE", `/api/hnth/rosters/${id}`, { token: adminToken })).status, 200);
   });
 });

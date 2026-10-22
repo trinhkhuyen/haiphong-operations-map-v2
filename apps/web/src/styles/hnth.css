@@ -80,3 +80,76 @@
   .hnth-metric-strip strong { margin-top:2px;font-size:11px; }
   .hnth-metric-strip em { font-size:6px; }
 }
+/* Danh sách điểm cầu theo phiên họp: thanh chọn dưới Import/Export và popup sửa danh sách. */
+.hnth-roster-control { margin-top:10px;padding-top:10px;border-top:1px solid #1d3a46; }
+.hnth-roster-control > label { display:flex;align-items:center;gap:6px;margin-bottom:6px;color:#67e8f9;font-size:9px; }
+.hnth-roster-row { display:flex;flex-wrap:wrap;gap:6px; }
+/* Ô chọn danh sách chiếm trọn 1 dòng, 3 nút chức năng xuống dòng dưới. */
+.hnth-roster-row select { flex:1 0 100%;width:100%;min-width:0;height:30px;padding:0 8px;border:1px solid #28505c;border-radius:6px;background:#071923;color:#dcebf0;font-size:9px; }
+.hnth-roster-others { margin-top:6px;color:#8fa9b3;font-size:8px; }
+.hnth-roster-others summary { cursor:pointer; }
+.hnth-roster-others > div { display:flex;align-items:center;justify-content:space-between;gap:6px;padding:4px 0 4px 10px; }
+.hnth-roster-others button { border:0;background:transparent;color:#8fa9b3;cursor:pointer; }
+.hnth-roster-others button:hover { color:#f87171; }
+.hnth-roster-message { margin:6px 0 0;color:#fda4af;font-size:8px; }
+.hnth-modal.hnth-roster-editor { width:min(1100px,calc(100vw - 48px));display:flex;flex-direction:column;overflow:hidden; }
+.hnth-roster-editor-body { display:flex;flex-direction:column;gap:10px;min-height:0;padding:14px 16px; }
+.hnth-roster-name { display:grid;gap:5px;color:#8fa9b3;font-size:9px; }
+.hnth-roster-name input,.hnth-roster-table input,.hnth-roster-tools select,.hnth-roster-filter input { height:30px;padding:0 8px;border:1px solid #28505c;border-radius:6px;background:#071923;color:#e7f2f6;font-size:10px; }
+.hnth-roster-summary,.hnth-roster-report { margin:0;color:#a7bec6;font-size:10px; }
+.hnth-roster-summary em { color:#94a3b8; }
+.hnth-roster-report { padding:8px 10px;border:1px solid #2b6b74;border-radius:8px;background:#0b2a31; }
+.hnth-roster-tools { display:flex;flex-wrap:wrap;align-items:center;gap:8px; }
+.hnth-roster-tools button { display:inline-flex;align-items:center;gap:5px;height:30px;padding:0 10px;border:1px solid #28616c;border-radius:6px;background:#0d3138;color:#67e8f9;font-size:9px;cursor:pointer; }
+.hnth-roster-filter { display:flex;align-items:center;gap:6px;flex:1;min-width:200px;color:#6f8a95; }
+.hnth-roster-filter input { flex:1; }
+.hnth-roster-table-wrap { flex:1;min-height:200px;max-height:calc(100vh - 360px);overflow:auto;border:1px solid #1d3a46;border-radius:8px; }
+.hnth-roster-table { width:100%;border-collapse:collapse;font-size:10px; }
+.hnth-roster-table th { position:sticky;top:0;z-index:1;padding:8px;background:#0c2430;color:#8fa9b3;font-weight:500;text-align:left; }
+.hnth-roster-table td { padding:4px 6px;border-top:1px solid #15303a;color:#dcebf0; }
+.hnth-roster-table td:first-child { width:34px;color:#6f8a95;text-align:right; }
+.hnth-roster-table input { width:100%;box-sizing:border-box; }
+.hnth-roster-table tr.has-error td { background:#3b111733; }
+.hnth-roster-table tr.has-error input { border-color:#b91c1c; }
+.hnth-roster-fixed-name { display:block;padding:0 8px; }
+.hnth-roster-kind { display:inline-block;padding:2px 7px;border-radius:999px;font-size:8px;white-space:nowrap; }
+.hnth-roster-kind.hub { background:#164e63;color:#a5f3fc; }
+.hnth-roster-kind.ward { background:#1e293b;color:#cbd5e1; }
+.hnth-roster-kind.extra { background:#3b2f0b;color:#fde68a; }
+.hnth-roster-empty { padding:16px !important;color:#6f8a95 !important;text-align:center; }
+.hnth-roster-error { padding:8px 10px;border-radius:8px;background:#3b1117;color:#fecaca;font-size:10px; }
+.hnth-roster-editor-body > footer { display:flex;align-items:center;gap:8px; }
+.hnth-roster-editor-body > footer small { flex:1;color:#6f8a95;font-size:9px; }
+.hnth-roster-editor-body > footer button { flex:none;width:auto;min-width:96px;height:34px;padding:0 16px; }
+/* Card Sở/Ban/Ngành: cột ở mép bản đồ phía đối diện log, đường nối SVG từ điểm Trung tâm. */
+.hnth-extra-lines { position:absolute;inset:0;z-index:4;width:100%;height:100%;pointer-events:none;overflow:visible; }
+.hnth-extra-lines path { fill:none;stroke-width:2;stroke-dasharray:6 4;opacity:.9; }
+/* Đủ 13 card không phải cuộn: card gọn (IP và trạng thái chung 1 dòng), cột bắt đầu ngay dưới thanh trạng thái. */
+.hnth-extra-cards { position:absolute;z-index:6;top:104px;display:flex;flex-direction:column;gap:6px;width:220px;max-height:calc(100% - 126px);overflow-y:auto;scrollbar-width:none;padding:4px; }
+.hnth-extra-cards.is-right { right:22px; }
+.hnth-extra-cards.is-left { left:22px; }
+/* Popup Chi tiết đang mở ở mép phải thì dời cột card sang trái nó để không bị che. */
+.map-area:has(.hnth-status-detail-popup) .hnth-extra-cards.is-right { right:284px; }
+.hnth-extra-card { display:grid;grid-template-columns:minmax(0,1fr) auto;column-gap:8px;row-gap:3px;padding:6px 10px;border:1.5px solid #2b5562;border-radius:9px;background:#081923e6;color:#e7f2f6;text-align:left;cursor:pointer;box-shadow:0 8px 22px #0007;backdrop-filter:blur(4px); }
+.hnth-extra-card strong { grid-column:1 / -1;font-size:11px;line-height:1.25;white-space:nowrap;overflow:hidden;text-overflow:ellipsis; }
+.hnth-extra-card small { color:#9ab3ba;font:500 9px "IBM Plex Mono"; }
+.hnth-extra-card em { display:flex;align-items:center;gap:5px;color:#cfe3e9;font-size:9px;font-style:normal; }
+.hnth-extra-card em i { width:7px;height:7px;border-radius:50%;background:#64748b; }
+.hnth-extra-card.unconnected em i { background:#facc15;box-shadow:0 0 6px #facc15; }
+.hnth-extra-card.connected em i { background:#22d3ee;box-shadow:0 0 6px #22d3ee; }
+.hnth-extra-card.lost em i { background:#ef4444;box-shadow:0 0 6px #ef4444; }
+.hnth-extra-card.is-selected { box-shadow:0 0 0 2px #67e8f9,0 8px 22px #0007; }
+.hnth-extra-card.is-pulsing { animation:hnth-extra-pulse .6s ease-in-out 3; }
+@keyframes hnth-extra-pulse { 0%,100% { box-shadow:0 0 0 2px #67e8f9,0 8px 22px #0007; } 50% { box-shadow:0 0 0 7px #67e8f9aa,0 8px 22px #0007; } }
+@media (max-width: 760px) { .hnth-extra-cards { width:160px; } .hnth-extra-cards.is-right { right:12px; } .hnth-extra-cards.is-left { left:12px; } }
+/* Chi tiết Endpoint gọn (3 dòng): ở đầu thanh trạng thái, bên trái ô Chưa xác định (vị trí đo bằng JS), kiểu theo log. */
+.hnth-endpoint-card { position:absolute;z-index:11;right:22px;top:96px;width:200px;box-sizing:border-box;display:grid;align-content:center;gap:2px;padding:5px 12px;line-height:1.2;border:1px solid #26505c;border-radius:10px;background:#081923f2;box-shadow:0 14px 35px #0008;color:#e7f2f6;pointer-events:none;animation:hnth-endpoint-in .18s ease-out; }
+.hnth-endpoint-card strong { font-size:12px;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis; }
+.hnth-endpoint-card small { color:#9ab3ba;font:500 10px "IBM Plex Mono"; }
+.hnth-endpoint-card em { display:flex;align-items:center;gap:6px;font-size:10px;font-style:normal;color:#cfe3e9; }
+.hnth-endpoint-card em i { width:8px;height:8px;border-radius:50%;background:#64748b; }
+.hnth-endpoint-card.unconnected em i { background:#facc15;box-shadow:0 0 6px #facc15; }
+.hnth-endpoint-card.connected em i { background:#22d3ee;box-shadow:0 0 6px #22d3ee; }
+.hnth-endpoint-card.lost em i { background:#ef4444;box-shadow:0 0 6px #ef4444; }
+.hnth-endpoint-card.is-overlay { border-color:transparent;background:transparent;box-shadow:none;text-shadow:0 1px 3px #000c; }
+@keyframes hnth-endpoint-in { from { opacity:0; } to { opacity:1; } }

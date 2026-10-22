@@ -15,7 +15,7 @@ const creators: Record<string, AppSlice<object>> = {
 };
 
 describe("store slices", () => {
-  it("không slice nào trùng khóa (spread sẽ âm thầm ghi đè) và đủ 115 trường (113 của store một khối cũ + hnthTransparentPopups và setter)", () => {
+  it("không slice nào trùng khóa (spread sẽ âm thầm ghi đè) và đủ 119 trường (113 của store một khối cũ + hnthTransparentPopups, hnthLogOnRight, hnthLogAtBottom và setter)", () => {
     const api = { setState: () => undefined, getState: () => ({}) as AppState } as unknown as Parameters<AppSlice<object>>[2];
     const owner = new Map<string, string>();
     for (const [name, create] of Object.entries(creators)) {
@@ -24,6 +24,6 @@ describe("store slices", () => {
         owner.set(key, name);
       }
     }
-    expect(owner.size).toBe(115);
+    expect(owner.size).toBe(119);
   });
 });

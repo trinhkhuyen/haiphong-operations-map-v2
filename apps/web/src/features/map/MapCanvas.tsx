@@ -1,7 +1,8 @@
 import { Home, Layers3 } from "lucide-react";
 import { useAppStore } from "../../core/store";
 import { HNTH_LAYER_ID } from "../layers/hnth-data-provider";
-import { AdministrativeFixedInfoCard, HnthFixedInfoCard } from "./MapInfoCards";
+import { AdministrativeFixedInfoCard } from "./MapInfoCards";
+import { HnthEndpointCard } from "./HnthEndpointCard";
 import { baseMapOptions } from "./lib/base-style";
 import { formatSummaryArea } from "./lib/drawing";
 import { useMapScope } from "./hooks/useMapScope";
@@ -16,10 +17,11 @@ import { useAdministrativeSelection } from "./hooks/useAdministrativeSelection";
 import { useVietnamProvinceBoundaries } from "./hooks/useVietnamProvinceBoundaries";
 import { useHnthHubPulse } from "./hooks/useHnthHubPulse";
 import { usePresentationBridge } from "./hooks/usePresentationBridge";
+import { HnthExtraCards } from "./HnthExtraCards";
 
 export function MapCanvas() {
   const scope = useMapScope();
-  const { containerRef, isBaseMapMenuOpen, setIsBaseMapMenuOpen, fixedMapInfo, zoneSummary } = scope;
+  const { containerRef, mapRef, isMapReady, isBaseMapMenuOpen, setIsBaseMapMenuOpen, fixedMapInfo, zoneSummary } = scope;
   const layers = useAppStore((state) => state.layers);
   const baseMapMode = useAppStore((state) => state.baseMapMode);
   const administrativeUnits = useAppStore((state) => state.administrativeUnits);
@@ -50,6 +52,7 @@ export function MapCanvas() {
   return (
     <>
       <div ref={containerRef} className="map-canvas" aria-label="Bản đồ giám sát Hải Phòng" />
+      <HnthExtraCards mapRef={mapRef} isMapReady={isMapReady} />
       <div className="map-navigation-tools" aria-label="Công cụ điều hướng bản đồ">
         {isBaseMapMenuOpen && (
           <div className="base-map-menu" role="menu" aria-label="Chế độ bản đồ">
@@ -94,9 +97,8 @@ export function MapCanvas() {
           }}
         />
       )}
-      {fixedHnthProperties && fixedMapInfo?.kind === "hnth" && (
-        <HnthFixedInfoCard properties={fixedHnthProperties} onClose={clearMapInspection} />
-      )}
+      {/* Chi tiết Endpoint gọn (tên, IP, trạng thái) dưới thanh trạng thái, tự tắt sau 5 giây. */}
+      <HnthEndpointCard properties={fixedMapInfo?.kind === "hnth" ? fixedHnthProperties ?? undefined : undefined} selection={fixedMapInfo?.kind === "hnth" ? fixedMapInfo : null} />
       {activePanel === "zones" && zoneSummary.zoneCount > 0 && (
         <aside className="zone-summary-popup" aria-label="Thông tin tổng hợp đối tượng các lớp">
           <span>THÔNG TIN TỔNG HỢP</span>

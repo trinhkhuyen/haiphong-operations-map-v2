@@ -14,6 +14,12 @@ export interface HnthSlice {
   /** Log giám sát và popup Chi tiết hiển thị trong suốt trên bản đồ (phím 8 / switch menu HNTH). Không persist. */
   hnthTransparentPopups: boolean;
   setHnthTransparentPopups: (value: boolean) => void;
+  /** Log trong suốt ở mép phải (Ctrl+`); card Sở/Ban/Ngành luôn ở phía đối diện. Không persist. */
+  hnthLogOnRight: boolean;
+  setHnthLogOnRight: (value: boolean) => void;
+  /** Log trong suốt nằm thành 1 hàng ở cạnh dưới bản đồ (kéo thả); card Sở/Ban/Ngành giữ nguyên phía. Không persist. */
+  hnthLogAtBottom: boolean;
+  setHnthLogAtBottom: (value: boolean) => void;
   updateHnthPoint: (pointId: string, update: Partial<HnthPointOverride>) => void;
   updateHnthPoints: (updates: Record<string, Partial<HnthPointOverride>>) => void;
   setSelectedHnthPointId: (pointId: string | null) => void;
@@ -35,6 +41,8 @@ export const createHnthSlice: AppSlice<HnthSlice> = (set) => ({
   hnthAreaStyles: DEFAULT_HNTH_AREA_STYLES,
   hnthAreaVisible: true,
   hnthTransparentPopups: false,
+  hnthLogOnRight: false,
+  hnthLogAtBottom: false,
   updateHnthPoint: (pointId, update) => set((state) => {
     const currentFeature = state.layers.find((layer) => layer.id === HNTH_LAYER_ID)?.data.features.find((item) => String(item.properties?.pointId ?? item.id ?? "") === pointId);
     const current = state.hnthPointOverrides[pointId] ?? {
@@ -123,4 +131,6 @@ export const createHnthSlice: AppSlice<HnthSlice> = (set) => ({
   })),
   setHnthAreaVisible: (hnthAreaVisible) => set({ hnthAreaVisible }),
   setHnthTransparentPopups: (hnthTransparentPopups) => set({ hnthTransparentPopups }),
+  setHnthLogOnRight: (hnthLogOnRight) => set({ hnthLogOnRight }),
+  setHnthLogAtBottom: (hnthLogAtBottom) => set({ hnthLogAtBottom }),
 });

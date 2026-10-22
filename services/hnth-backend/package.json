@@ -6,7 +6,9 @@
   "scripts": {
     "start": "node src/server.mjs",
     "dev": "node --watch src/server.mjs",
-    "test": "node --test \"test/*.test.mjs\""
+    "test": "node --test \"test/*.test.mjs\"",
+    "data:export": "node scripts/hnth-data.mjs export",
+    "data:import": "node scripts/hnth-data.mjs import"
   },
   "dependencies": {
     "@haiphong-ops/hnth-protocol": "workspace:*",

@@ -15,6 +15,8 @@ import { SystemStatusBar } from "./SystemStatusBar";
 import { MapTitleClock } from "./MapTitleClock";
 import { useOperationalLayerLoader } from "./useOperationalLayerLoader";
 
+const SIDEBAR_COLLAPSED_KEY = "hnth-sidebar-collapsed";
+
 // Các panel không mở mặc định được tải khi mở lần đầu (HnthPanel luôn mount nên
 // nằm trong bundle chính).
 const LayerPanel = lazy(() => import("../features/layers/LayerPanel").then((module) => ({ default: module.LayerPanel })));
@@ -35,7 +37,17 @@ export function App() {
   const isMobileDevice = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent)
     || window.matchMedia("(max-width: 760px)").matches;
   const isPresentationMode = presentationRequested && Boolean(window.opener) && !isMobileDevice;
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => window.matchMedia("(max-width: 760px)").matches);
+  // Trạng thái đóng/mở menu trái lưu theo trình duyệt để F5 giữ nguyên; chưa lưu thì điện thoại mặc định đóng.
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => {
+    try {
+      const saved = window.localStorage.getItem(SIDEBAR_COLLAPSED_KEY);
+      if (saved !== null) return saved === "1";
+    } catch { /* localStorage bị chặn: dùng mặc định */ }
+    return window.matchMedia("(max-width: 760px)").matches;
+  });
+  useEffect(() => {
+    try { window.localStorage.setItem(SIDEBAR_COLLAPSED_KEY, isSidebarCollapsed ? "1" : "0"); } catch { /* bỏ qua */ }
+  }, [isSidebarCollapsed]);
   const [showUserAdmin, setShowUserAdmin] = useState(false);
   const auth = useAuth();
   const { user, canSeeMenu } = auth;

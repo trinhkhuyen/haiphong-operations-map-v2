@@ -72,6 +72,8 @@ export function registerHnthRoutes(router, { realtime }) {
     if (!pointId) return reply(400, { error: "pointId is required" });
     if (!(await agentExists(agentId))) return reply(404, { error: "agent not found" });
     const endpoint = await pool.query("INSERT INTO endpoints(endpoint_id,name,ip_address,model_vendor,status,checked_at) VALUES($1,$1,CASE WHEN $2='' THEN NULL ELSE $2::inet END,$3,'unknown',NULL) ON CONFLICT(endpoint_id) DO UPDATE SET ip_address=excluded.ip_address,model_vendor=COALESCE(excluded.model_vendor,endpoints.model_vendor),status='unknown',checked_at=NULL,updated_at=now() RETURNING endpoint_id AS \"pointId\",host(ip_address) AS \"ipAddress\",status", [pointId, ipAddress, body.modelVendor || null]);
+    // Có dữ liệu chủ điểm cầu thì IP sửa ở Cấu hình điểm cũng lưu vào dữ liệu chủ.
+    await pool.query("UPDATE hnth_catalog c SET points=(SELECT jsonb_agg(CASE WHEN p->>'pointId'=$1 THEN p || jsonb_build_object('ipAddress',$2::text,'modelVendor',COALESCE($3::text,p->>'modelVendor')) ELSE p END ORDER BY ord) FROM jsonb_array_elements(c.points) WITH ORDINALITY AS e(p,ord)),updated_at=now() WHERE c.id=1 AND c.points @> jsonb_build_array(jsonb_build_object('pointId',$1::text))", [pointId, ipAddress, body.modelVendor || null]);
     // Lệnh cấu hình điểm mới thay lệnh cũ chưa được Agent nhận cho cùng điểm.
     await pool.query("UPDATE commands SET status='superseded' WHERE agent_id=$1 AND status='pending' AND type='point-config' AND payload->>'pointId'=$2", [agentId, pointId]);
     await pool.query("INSERT INTO commands(agent_id,type,payload) VALUES($1,'point-config',$2)", [agentId, JSON.stringify({ pointId, ipAddress, modelVendor: body.modelVendor || null, forceTest: Boolean(ipAddress) })]);

@@ -7,6 +7,7 @@ import { createCors, readCookie } from "../src/http.mjs";
 import { createApp } from "../src/app.mjs";
 import { isAgentOnline } from "../src/services/realtime.mjs";
 import { safeReleaseFileName, safeReleaseVersion } from "../src/services/releases.mjs";
+import { normalizeRosterPointIds, normalizeRosterPoints, rosterAgentPoints } from "../src/services/rosters.mjs";
 
 describe("router", () => {
   const router = createRouter()
@@ -98,5 +99,31 @@ describe("app: quyền truy cập", () => {
     const res = await call("OPTIONS", "/api/users", { origin: "http://web" });
     assert.equal(res.status, 204);
     assert.equal(res.headers["access-control-allow-origin"], "http://web");
+  });
+});
+
+describe("danh sách điểm phiên họp", () => {
+  const point = (patch) => ({ pointId: "hnth-branch-1", kind: "ward", name: "UBND Ái Quốc", ipAddress: "10.0.0.1", ...patch });
+  it("chuẩn hóa và giữ đủ 3 loại điểm", () => {
+    const { points, error } = normalizeRosterPoints([point({}), point({ pointId: "hnth-hub", kind: "hub", name: " Trung tâm Chính trị - Hành chính ", ipAddress: "" }), point({ pointId: "hnth-extra-so-y-te", kind: "extra", name: "Sở Y tế", ipAddress: "10.0.0.9", gateway: " 10.0.0.1 " })]);
+    assert.equal(error, undefined);
+    assert.deepEqual(points.map((item) => [item.kind, item.name, item.ipAddress, item.gateway]), [["ward", "UBND Ái Quốc", "10.0.0.1", ""], ["hub", "Trung tâm Chính trị - Hành chính", "", ""], ["extra", "Sở Y tế", "10.0.0.9", "10.0.0.1"]]);
+  });
+  it("từ chối mã sai loại, trùng điểm, IP sai hoặc trùng", () => {
+    assert.match(normalizeRosterPoints([point({ kind: "extra" })]).error, /mã điểm/);
+    assert.match(normalizeRosterPoints([point({}), point({ ipAddress: "10.0.0.2" })]).error, /trùng/);
+    assert.match(normalizeRosterPoints([point({ ipAddress: "999.1.1.1" })]).error, /IP/);
+    assert.match(normalizeRosterPoints([point({}), point({ pointId: "hnth-branch-2", name: "B" })]).error, /trùng với "UBND Ái Quốc"/);
+    assert.match(normalizeRosterPoints("x").error, /mảng/);
+  });
+  it("danh sách phiên họp chỉ chứa mã điểm có trong dữ liệu chủ", () => {
+    const catalog = new Set(["hnth-hub", "hnth-branch-1"]);
+    assert.deepEqual(normalizeRosterPointIds(["hnth-hub", "hnth-hub", " hnth-branch-1 "], catalog).pointIds, ["hnth-hub", "hnth-branch-1"]);
+    assert.match(normalizeRosterPointIds(["hnth-extra-x"], catalog).error, /không có trong dữ liệu/);
+    assert.match(normalizeRosterPointIds([], catalog).error, /ít nhất 1/);
+    assert.match(normalizeRosterPointIds(["hnth-hub"], new Set()).error, /Import trước/);
+  });
+  it("chỉ giao cho Agent các điểm có IP", () => {
+    assert.deepEqual(rosterAgentPoints([point({}), point({ pointId: "hnth-hub", kind: "hub", ipAddress: "" })]).map((item) => item.pointId), ["hnth-branch-1"]);
   });
 });
