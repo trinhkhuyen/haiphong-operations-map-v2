@@ -2,7 +2,7 @@ appId: vn.haiphong.ops.hnth-agent
 # Giữ productName cố định giữa các phiên bản; version nằm trong package.json/artifactName.
 productName: Agent HNTH
 directories:
-  output: ../../outputs/hnth-agent-latest
+  output: ../../outputs/hnth-agent-v0.2.7
 files:
   - desktop/main.cjs
   - desktop/hnth-agent.png
@@ -23,6 +23,7 @@ extraResources:
   - from: config.json
     to: agent/config.json
 win:
+  signAndEditExecutable: false
   target:
     - portable
   artifactName: Agent-HNTH-v${version}-Windows-Tray.exe
