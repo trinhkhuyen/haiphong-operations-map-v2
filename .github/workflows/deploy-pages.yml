@@ -28,7 +28,11 @@ jobs:
           node-version: 22
           cache: pnpm
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        # The workspace also contains optional desktop packages whose package
+        # manifests can change independently of the browser demo. Pages only
+        # needs the web dependency graph, so let pnpm reconcile that workspace
+        # lock metadata in the ephemeral runner before building.
+        run: pnpm install --no-frozen-lockfile
       - name: Build static frontend demo
         run: pnpm --filter @haiphong-ops/web build
         env:
