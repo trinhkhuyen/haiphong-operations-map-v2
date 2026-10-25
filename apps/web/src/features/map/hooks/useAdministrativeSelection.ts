@@ -42,7 +42,7 @@ export function useAdministrativeSelection(context: MapScope & MapInspection) {
   useEffect(() => {
     const map = mapRef.current;
     if (!isMapReady || !map?.getLayer("haiphong-outside-mask")) return;
-    map.setLayoutProperty("haiphong-outside-mask", "visibility", dimOutsideHaiphong ? "visible" : "none");
+    map.setLayoutProperty("haiphong-outside-mask", "visibility", dimOutsideHaiphong && map.getZoom() >= 2 ? "visible" : "none");
   }, [dimOutsideHaiphong, isMapReady]);
 
   useEffect(() => {
@@ -97,16 +97,19 @@ export function useAdministrativeSelection(context: MapScope & MapInspection) {
     const map = mapRef.current;
     if (!isMapReady || !map?.getLayer("administrative-fill") || !map.getLayer("administrative-line")) return;
     const showZoneSelection = activePanel === "zones";
+    const isCameraPanel = activePanel === "camera";
     const selectedCondition: maplibregl.ExpressionSpecification = showZoneSelection && selectedAdministrativeIds.length > 0
       ? ["in", ["get", "id"], ["literal", selectedAdministrativeIds]]
       : ["==", ["get", "id"], -1];
     const focusedCondition: maplibregl.ExpressionSpecification = ["==", ["get", "id"], showZoneSelection ? focusedAdministrativeId ?? -1 : -1];
     // HNTH tự tô nền theo trạng thái kết nối nên không chồng màu khung mặc định.
-    const hasDefaultAdministrativeUnit = activePanel !== "conference" && defaultViewportEnabled && defaultAdministrativeIds.length > 0;
+    const hasDefaultAdministrativeUnit = activePanel !== "conference" && !isCameraPanel && defaultViewportEnabled && defaultAdministrativeIds.length > 0;
     const defaultCondition: maplibregl.ExpressionSpecification = hasDefaultAdministrativeUnit
       ? ["in", ["get", "id"], ["literal", defaultAdministrativeIds]]
       : ["==", ["get", "id"], -1];
-    map.setPaintProperty("administrative-fill", "fill-color", [
+    // Camera chỉ dùng bản đồ TP và các lớp camera. Không để lớp địa giới nền
+    // mặc định hoặc màu trạng thái HNTH tạo một lớp phủ xanh trên bản đồ.
+    map.setPaintProperty("administrative-fill", "fill-color", isCameraPanel ? "#38bdf8" : [
       "case",
       focusedCondition, "#ffffff",
       defaultCondition, "#fde68a",
@@ -114,7 +117,7 @@ export function useAdministrativeSelection(context: MapScope & MapInspection) {
       hasDefaultAdministrativeUnit, DEFAULT_VIEWPORT_SURROUNDING_FILL_COLOR,
       "#38bdf8",
     ]);
-    map.setPaintProperty("administrative-fill", "fill-opacity", [
+    map.setPaintProperty("administrative-fill", "fill-opacity", isCameraPanel ? 0 : [
       "case",
       focusedCondition, 0,
       // Địa giới mặc định không bị phủ màu để phần bản đồ bên trong hiển thị 100%.

@@ -3,11 +3,12 @@ import type { AdministrativeSlice } from "./administrative";
 import type { AnnotationsSlice } from "./annotations";
 import type { DrawingSlice } from "./drawing";
 import type { HnthSlice } from "./hnth";
+import type { CameraSlice } from "./camera";
 import type { LayersSlice } from "./layers";
 import type { MapSlice } from "./map";
 import type { UiSlice } from "./ui";
 
-export type AppState = UiSlice & LayersSlice & MapSlice & AdministrativeSlice & DrawingSlice & AnnotationsSlice & HnthSlice;
+export type AppState = UiSlice & LayersSlice & MapSlice & AdministrativeSlice & DrawingSlice & AnnotationsSlice & HnthSlice & CameraSlice;
 
 /**
  * Một slice của useAppStore. `set`/`get` thao tác trên toàn bộ AppState, nên

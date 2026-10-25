@@ -2,6 +2,7 @@
 import { useEffect } from "react";
 import maplibregl, { type GeoJSONSource } from "maplibre-gl";
 import type { MapScope } from "./useMapScope";
+import { publicAsset } from "../../../core/runtime";
 
 export function useVietnamProvinceBoundaries(context: MapScope) {
   const { mapRef, vietnamProvinceLabelMarkersRef, isMapReady } = context;
@@ -9,8 +10,15 @@ export function useVietnamProvinceBoundaries(context: MapScope) {
     const map = mapRef.current;
     if (!isMapReady || !map) return;
     const controller = new AbortController();
+    const syncProvinceLabelVisibility = () => {
+      const visible = map.getZoom() >= 2;
+      for (const marker of vietnamProvinceLabelMarkersRef.current) {
+        marker.getElement().style.display = visible ? "" : "none";
+      }
+    };
+    map.on("zoom", syncProvinceLabelVisibility);
 
-    void fetch("/data/vietnam-provinces.geojson", { signal: controller.signal })
+    void fetch(publicAsset("data/vietnam-provinces.geojson"), { signal: controller.signal })
       .then((response) => {
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         return response.json() as Promise<GeoJSON.FeatureCollection>;
@@ -52,6 +60,7 @@ export function useVietnamProvinceBoundaries(context: MapScope) {
             const isArchipelago = item.properties?.kind === "archipelago-label";
             const name = String(item.properties?.name ?? "");
             element.className = `vietnam-province-label${isArchipelago ? " archipelago-label" : ""}`;
+            element.style.display = map.getZoom() >= 2 ? "" : "none";
             element.textContent = name;
             element.setAttribute("aria-label", name.replace("\n", " "));
             const coordinates = item.geometry.coordinates as [number, number];
@@ -66,11 +75,15 @@ export function useVietnamProvinceBoundaries(context: MapScope) {
               .setLngLat(labelCoordinates)
               .addTo(map);
           });
+        syncProvinceLabelVisibility();
       })
       .catch((error: unknown) => {
         if (!controller.signal.aborted) console.warn("Không tải được ranh giới tỉnh/thành Việt Nam.", error);
       });
 
-    return () => controller.abort();
+    return () => {
+      controller.abort();
+      map.off("zoom", syncProvinceLabelVisibility);
+    };
   }, [isMapReady]);
 }

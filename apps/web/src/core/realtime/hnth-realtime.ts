@@ -8,6 +8,7 @@
 //   gọi listener, để listener đồng bộ thấy trạng thái mới (thứ tự như event cũ).
 import { hnthApi } from "../api/clients";
 import { useHnthLiveStore, type HnthCatalog, type HnthRoster } from "./hnth-live-store";
+import { demoMode } from "../runtime";
 
 type AgentSummary = { agentId?: string; name?: string; status?: string; version?: string | null };
 type MonitoringPayload = { enabled?: boolean; concurrency?: number; waitSeconds?: number; agentId?: string; sessionId?: string | null };
@@ -133,6 +134,7 @@ function bindVisibility() {
 
 /** Nhận snapshot monitor-state mỗi `intervalMs` (và ngay khi đăng ký). */
 export function subscribeHnthSnapshots(intervalMs: number, listener: (result: SnapshotResult) => void) {
+  if (demoMode) return () => undefined;
   const subscriber = { intervalMs, listener };
   snapshotSubscribers.add(subscriber);
   bindVisibility();
@@ -143,6 +145,7 @@ export function subscribeHnthSnapshots(intervalMs: number, listener: (result: Sn
 
 /** Nhận từng message SSE; SSE chỉ mở khi có ít nhất một listener. */
 export function subscribeHnthStream(listener: (payload: HnthLivePayload) => void) {
+  if (demoMode) return () => undefined;
   streamListeners.add(listener);
   bindVisibility();
   // Mở lại kết nối mỗi lần đăng ký (như khi HnthPanel tạo lại handler trước đây),

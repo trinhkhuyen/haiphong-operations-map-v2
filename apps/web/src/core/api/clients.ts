@@ -56,6 +56,19 @@ export const agentsApi = {
   },
 };
 
+export const cameraApi = {
+  list: () => hnthFetch(apiUrl("/api/cameras")),
+  logs: (cameraId: string) => hnthFetch(apiUrl(`/api/cameras/${encodeURIComponent(cameraId)}/logs`)),
+  create: (body: Record<string, unknown>) => hnthFetch(apiUrl("/api/cameras"), jsonRequest("POST", body)),
+  update: (cameraId: string, body: Record<string, unknown>) => hnthFetch(apiUrl(`/api/cameras/${encodeURIComponent(cameraId)}`), jsonRequest("PATCH", body)),
+  remove: (cameraId: string) => hnthFetch(apiUrl(`/api/cameras/${encodeURIComponent(cameraId)}`), { method: "DELETE" }),
+  probe: (cameraId: string, agentId: string) => hnthFetch(apiUrl(`/api/cameras/${encodeURIComponent(cameraId)}/probe`), jsonRequest("POST", { agentId })),
+  disconnect: (cameraId: string) => hnthFetch(apiUrl(`/api/cameras/${encodeURIComponent(cameraId)}/disconnect`), jsonRequest("POST", {})),
+  openStream: (cameraId: string, body: { channel: number; profile?: "main" | "sub"; agentId?: string }) => hnthFetch(apiUrl(`/api/cameras/${encodeURIComponent(cameraId)}/streams`), jsonRequest("POST", body)),
+  stream: (sessionId: string) => hnthFetch(apiUrl(`/api/camera-streams/${encodeURIComponent(sessionId)}`)),
+  closeStream: (sessionId: string) => hnthFetch(apiUrl(`/api/camera-streams/${encodeURIComponent(sessionId)}`), { method: "DELETE" }),
+};
+
 export const usersApi = {
   list: () => hnthFetch(apiUrl("/api/users")),
   create: (body: Record<string, unknown>) => hnthFetch(apiUrl("/api/users"), jsonRequest("POST", body)),

@@ -6,7 +6,7 @@ import { HNTH_HUB, HNTH_LAYER_ID, HNTH_STATUS_LABELS, normalizeHnthStatus } from
 import { focusHnthPoint } from "../conference/hnth-focus";
 import type { HnthPointFeature } from "../conference/hnth-types";
 
-type Line = { pointId: string; d: string; color: string };
+type Line = { pointId: string; d: string; color: string; status: ReturnType<typeof normalizeHnthStatus> };
 
 /**
  * Điểm Sở/Ban/Ngành không có vị trí trên bản đồ: hiển thị thành cột card ở mép bản đồ, phía
@@ -25,6 +25,7 @@ export function HnthExtraCards({ mapRef, isMapReady }: { mapRef: RefObject<MapLi
   const extras = useMemo(() => (layer?.data.features ?? []).filter((item): item is HnthPointFeature => item.geometry.type === "Point" && item.properties?.role === "extra"), [layer]);
   const onRight = !logOnRight;
   const cardRefs = useRef(new Map<string, HTMLButtonElement>());
+  const linesRef = useRef<SVGSVGElement | null>(null);
   const [lines, setLines] = useState<Line[]>([]);
   const [pulseId, setPulseId] = useState<string | null>(null);
   const [frame, setFrame] = useState(0);
@@ -35,6 +36,9 @@ export function HnthExtraCards({ mapRef, isMapReady }: { mapRef: RefObject<MapLi
     if (!isMapReady || !map || !extras.length) return;
     let raf = 0;
     const schedule = () => { if (!raf) raf = window.requestAnimationFrame(() => { raf = 0; setFrame((value) => value + 1); }); };
+    // Khi chuyển panel, map instance có thể được gắn ref sau lần layout đầu tiên của card.
+    // Kích hoạt một lượt đo sau mount để đảm bảo các line SVG không bị bỏ qua vĩnh viễn.
+    schedule();
     map.on("move", schedule);
     map.on("resize", schedule);
     // Cột card đổi chỗ bằng CSS khi popup Chi tiết đóng/mở hoặc log đổi phía (không có sự kiện
@@ -48,21 +52,49 @@ export function HnthExtraCards({ mapRef, isMapReady }: { mapRef: RefObject<MapLi
   useLayoutEffect(() => {
     const map = mapRef.current;
     if (!map || !isMapReady || !lineVisible) { setLines([]); return; }
-    const box = map.getContainer().getBoundingClientRect();
-    const hub = map.project(HNTH_HUB);
-    setLines(extras.flatMap((item) => {
-      const pointId = String(item.properties?.pointId ?? "");
-      const card = cardRefs.current.get(pointId)?.getBoundingClientRect();
-      const style = lineStyles[normalizeHnthStatus(item.properties?.status)];
-      if (!card || !style?.visible) return [];
-      // Gắn vào cạnh card gần điểm Trung tâm nhất (cột card có thể bị dời qua bên kia điểm Trung tâm).
-      const left = card.left - box.left;
-      const right = card.right - box.left;
-      const x = hub.x <= left ? left : hub.x >= right ? right : (left + right) / 2;
-      const y = card.top + card.height / 2 - box.top;
-      // Cong nhẹ: điểm điều khiển ngang tầm điểm Trung tâm, giữa đường.
-      return [{ pointId, color: style.color, d: `M${hub.x},${hub.y} Q${(hub.x + x) / 2},${hub.y} ${x},${y}` }];
-    }));
+
+    // Card layout được trình duyệt hoàn tất sau commit của component. Tính lại ở hai
+    // frame liên tiếp để không bị rơi vào lần đo đầu tiên khi cột card còn chưa có kích thước.
+    let firstFrame = 0;
+    let secondFrame = 0;
+    const recalculate = () => {
+      const overlay = linesRef.current;
+      if (!overlay) return;
+      const overlayBox = overlay.getBoundingClientRect();
+      const mapBox = map.getContainer().getBoundingClientRect();
+      const projectedHub = map.project(HNTH_HUB);
+      // map.project trả tọa độ trong canvas; đổi sang cùng hệ tọa độ với SVG overlay.
+      const hub = {
+        x: projectedHub.x + mapBox.left - overlayBox.left,
+        y: projectedHub.y + mapBox.top - overlayBox.top,
+      };
+      setLines(extras.flatMap((item) => {
+        const pointId = String(item.properties?.pointId ?? "");
+        const card = cardRefs.current.get(pointId)?.getBoundingClientRect();
+        const style = lineStyles[normalizeHnthStatus(item.properties?.status)];
+        if (!card || !style?.visible) return [];
+        // Gắn vào cạnh card gần điểm Trung tâm nhất (cột card có thể bị dời qua bên kia điểm Trung tâm).
+        const left = card.left - overlayBox.left;
+        const right = card.right - overlayBox.left;
+        const x = hub.x <= left ? left : hub.x >= right ? right : (left + right) / 2;
+        const y = card.top + card.height / 2 - overlayBox.top;
+        // Cong nhẹ: điểm điều khiển ngang tầm điểm Trung tâm, giữa đường.
+        return [{
+          pointId,
+          color: style.color,
+          status: normalizeHnthStatus(item.properties?.status),
+          d: `M${hub.x},${hub.y} Q${(hub.x + x) / 2},${hub.y} ${x},${y}`,
+        }];
+      }));
+    };
+    firstFrame = window.requestAnimationFrame(() => {
+      recalculate();
+      secondFrame = window.requestAnimationFrame(recalculate);
+    });
+    return () => {
+      window.cancelAnimationFrame(firstFrame);
+      window.cancelAnimationFrame(secondFrame);
+    };
   }, [frame, extras, onRight, lineStyles, lineVisible, isMapReady, mapRef]);
 
   useEffect(() => onAppEvent("hnth:extra-focus", ({ pointId }) => {
@@ -78,8 +110,17 @@ export function HnthExtraCards({ mapRef, isMapReady }: { mapRef: RefObject<MapLi
 
   if (!layerVisible || !extras.length) return null;
   return <>
-    <svg className="hnth-extra-lines" aria-hidden="true">
-      {lines.map((line) => <path key={line.pointId} d={line.d} stroke={line.color} />)}
+    <svg ref={linesRef} className="hnth-extra-lines" aria-hidden="true">
+      {lines.map((line) => <g key={line.pointId}>
+        <path d={line.d} stroke={line.color} />
+        {/* Card Sở/Ban/Ngành dùng path SVG riêng; animateMotion giữ chấm chạy đồng bộ
+            với đường MapLibre và chỉ bật cho Chờ kết nối/Đã kết nối khi checkbox Tín hiệu bật. */}
+        {lineStyles[line.status]?.signal && (line.status === "unconnected" || line.status === "connected") && [0, 1].map((index) => (
+          <circle key={`${line.pointId}-signal-${index}`} r="3" fill={line.color}>
+            <animateMotion dur="2.4s" begin={`${index * -1.2}s`} repeatCount="indefinite" path={line.d} />
+          </circle>
+        ))}
+      </g>)}
     </svg>
     <div className={`hnth-extra-cards ${onRight ? "is-right" : "is-left"}`} role="list" aria-label="Điểm cầu Sở/Ban/Ngành">
       {extras.map((item) => {

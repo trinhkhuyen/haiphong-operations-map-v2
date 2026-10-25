@@ -2,6 +2,7 @@ import type { ConnectionStatus } from "@haiphong-ops/hnth-protocol";
 import type { Feature, FeatureCollection, Geometry, LineString, Point } from "geojson";
 import type { OperationalLayer } from "../../core/types";
 import type { HnthCatalog, HnthRoster, HnthRosterPoint } from "../../core/realtime/hnth-live-store";
+import { publicAsset } from "../../core/runtime";
 
 export const HNTH_LAYER_ID = "hnth-network";
 
@@ -11,6 +12,8 @@ export type HnthConnectionStatus = ConnectionStatus;
 export interface HnthVisualStyle {
   color: string;
   visible: boolean;
+  /** Chấm tín hiệu chạy dọc đường kết nối; chỉ dùng cho kiểu đường HNTH. */
+  signal?: boolean;
 }
 
 export type HnthStatusStyles = Record<HnthConnectionStatus, HnthVisualStyle>;
@@ -24,8 +27,8 @@ export const HNTH_STATUS_LABELS: Record<HnthConnectionStatus, string> = {
 
 export const DEFAULT_HNTH_LINE_STYLES: HnthStatusStyles = {
   unknown: { color: "transparent", visible: false },
-  unconnected: { color: "#facc15", visible: true },
-  connected: { color: "#00FFFF", visible: true },
+  unconnected: { color: "#facc15", visible: true, signal: false },
+  connected: { color: "#00FFFF", visible: true, signal: false },
   lost: { color: "#ef4444", visible: true },
 };
 
@@ -62,7 +65,7 @@ export function loadHnthDemoLayer(): Promise<OperationalLayer> {
 }
 
 async function buildHnthDemoLayer(signal?: AbortSignal): Promise<OperationalLayer> {
-  const response = await fetch("/data/osm-layers/government-ubnd.json", { signal });
+  const response = await fetch(publicAsset("data/osm-layers/government-ubnd.json"), { signal });
   if (!response.ok) throw new Error(`Không tải được danh sách UBND (${response.status})`);
   const ubnd = await response.json() as FeatureCollection<Geometry, UbndSnapshotProperties>;
   const branchPoints = ubnd.features.filter((item): item is Feature<Point, UbndSnapshotProperties> => item.geometry.type === "Point");

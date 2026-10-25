@@ -40,7 +40,7 @@ export function classifyProbeResult(successful, total) {
 }
 
 /** Các lệnh Operator/Admin được phép gửi qua POST /api/agents/:id/commands. */
-export const OPERATOR_COMMAND_TYPES = Object.freeze(["scan-local-network", "test-point", "point-config", "monitor-start", "monitor-stop", "agent-update"]);
+export const OPERATOR_COMMAND_TYPES = Object.freeze(["scan-local-network", "test-point", "point-config", "monitor-start", "monitor-stop", "camera-probe", "camera-stream-start", "camera-stream-stop", "agent-update"]);
 
 /** Resource VS_VERSIONINFO của launcher portable nằm trong vài trăm KB đầu file. */
 export const EXE_VERSION_SCAN_BYTES = 2 * 1024 * 1024;

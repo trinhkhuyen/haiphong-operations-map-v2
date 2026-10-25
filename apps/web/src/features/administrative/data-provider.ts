@@ -1,4 +1,5 @@
 import type { AdministrativeUnit } from "../../core/types";
+import { publicAsset } from "../../core/runtime";
 
 interface OfficialMapping {
   id: number;
@@ -13,7 +14,14 @@ interface OfficialGeometry {
   geometry: GeoJSON.Geometry;
 }
 
-const OFFICIAL_BASE = "/hp-official/data_geometry";
+export interface UbndPoint {
+  id: string;
+  wardCode: string;
+  name: string;
+  coordinates: [number, number];
+}
+
+const OFFICIAL_BASE = publicAsset("hp-official/data_geometry");
 
 export async function loadAdministrativeUnits(): Promise<AdministrativeUnit[]> {
   const [mappingResponse, geometryResponse] = await Promise.all([
@@ -39,6 +47,22 @@ export async function loadAdministrativeUnits(): Promise<AdministrativeUnit[]> {
       geometry: geometryByCode.get(item.wardCode),
     }))
     .filter((item): item is AdministrativeUnit => Boolean(item.geometry))
+    .sort((a, b) => a.name.localeCompare(b.name, "vi"));
+}
+
+/** Các mốc UBND xã/phường dùng để gán camera trên bản đồ. */
+export async function loadGovernmentUbndPoints(): Promise<UbndPoint[]> {
+  const response = await fetch(publicAsset("data/osm-layers/government-ubnd.json"));
+  if (!response.ok) throw new Error("Không tải được lớp mốc UBND");
+  const data = await response.json() as GeoJSON.FeatureCollection<GeoJSON.Point, { name?: string; wardCode?: string }>;
+  return data.features
+    .filter((feature) => Boolean(feature.geometry?.type === "Point" && feature.properties?.wardCode))
+    .map((feature) => ({
+      id: String(feature.id ?? feature.properties?.wardCode),
+      wardCode: String(feature.properties?.wardCode),
+      name: String(feature.properties?.name || "Mốc UBND"),
+      coordinates: feature.geometry.coordinates as [number, number],
+    }))
     .sort((a, b) => a.name.localeCompare(b.name, "vi"));
 }
 

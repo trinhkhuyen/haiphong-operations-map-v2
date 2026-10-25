@@ -5,7 +5,7 @@ import { bbox } from "@turf/turf";
 import { useAppStore } from "../../../core/store";
 import { unitsToFeatureCollection } from "../../administrative/data-provider";
 import { onAppEvent } from "../../../core/events";
-import { HOME_CITY_TRANSITION_DURATION_MS, HOME_CITY_PAUSE_MS, REGIONAL_OPERATIONAL_BOUNDS, setMobileHomePanBounds, MOBILE_HOME_ZOOM_OUT_LEVELS, MOBILE_HOME_PAN_DOWN_PX, fitMobileHomeOverview, getHaiphongOverviewBounds, HAIPHONG_OVERVIEW_PADDING, HAIPHONG_MOBILE_OVERVIEW_PADDING, getHaiphongOverviewPadding, fitHaiphongOverview } from "../lib/viewport";
+import { HOME_CITY_TRANSITION_DURATION_MS, HOME_CITY_PAUSE_MS, REGIONAL_OPERATIONAL_BOUNDS, GLOBAL_OVERVIEW_CENTER, GLOBAL_OVERVIEW_ZOOM, VIETNAM_OVERVIEW_CENTER, VIETNAM_OVERVIEW_ZOOM, REGIONAL_PRESENTATION_ZOOM, GLOBAL_OVERVIEW_TRANSITION_DURATION_MS, setMobileHomePanBounds, MOBILE_HOME_ZOOM_OUT_LEVELS, MOBILE_HOME_PAN_DOWN_PX, fitMobileHomeOverview, getHaiphongOverviewBounds, HAIPHONG_OVERVIEW_PADDING, HAIPHONG_MOBILE_OVERVIEW_PADDING, getHaiphongOverviewPadding, fitHaiphongOverview } from "../lib/viewport";
 import type { MapScope } from "./useMapScope";
 
 // Phím 7: tốc độ quay vòng camera (độ/giây). 3°/s = một vòng 360° mất 2 phút.
@@ -13,19 +13,29 @@ import type { MapScope } from "./useMapScope";
 // lần chẵn quay +ORBIT (ngược lại). Tăng số này để quay nhanh hơn, giảm để chậm hơn.
 export const ORBIT_DEGREES_PER_SECOND = 3;
 
+function isAtGlobalOverviewZoom(map: maplibregl.Map) {
+  // Chỉ dùng mốc zoom làm điều kiện chặn. Sau animation MapLibre có thể còn
+  // sai số nhỏ ở tâm/góc camera dù đã đạt đúng khung toàn cầu 1.9.
+  return map.getZoom() < REGIONAL_PRESENTATION_ZOOM;
+}
+
 // Phím 0/1 bấm chẵn lần: về góc camera do người dùng lưu bằng Shift+0/Shift+1 (lưu theo trình duyệt).
 type PresetDigit = "0" | "1";
 const cameraPresetKey = (digit: PresetDigit) => `hnth-camera-preset-${digit}`;
+const homeCameraPresetKey = "hnth-camera-home-preset";
 type CameraPreset = { center: [number, number]; zoom: number; pitch: number; bearing: number };
-function readCameraPreset(digit: PresetDigit): CameraPreset | null {
+function readPreset(key: string): CameraPreset | null {
   try {
-    const value = JSON.parse(window.localStorage.getItem(cameraPresetKey(digit)) || "null") as CameraPreset | null;
+    const value = JSON.parse(window.localStorage.getItem(key) || "null") as CameraPreset | null;
     return value && Array.isArray(value.center) && Number.isFinite(value.zoom) ? value : null;
   } catch { return null; }
 }
+function readCameraPreset(digit: PresetDigit): CameraPreset | null { return readPreset(cameraPresetKey(digit)); }
+function readHomeCameraPreset(): CameraPreset | null { return readPreset(homeCameraPresetKey); }
 
 export function useMapCamera(context: MapScope) {
-  const { mapRef, drawSearchMarkerRef, hasSetInitialViewportRef, homeTransitionTimeoutRef, isHomeTransitionActiveRef, isMapReady, isInitialRegionalMapReady } = context;
+  const { mapRef, drawSearchMarkerRef, vietnamProvinceLabelMarkersRef, hasSetInitialViewportRef, homeTransitionTimeoutRef, isHomeTransitionActiveRef, isMapReady, isInitialRegionalMapReady } = context;
+  const globalTransitionFrameRef = useRef<number | null>(null);
   const administrativeUnits = useAppStore((state) => state.administrativeUnits);
   const administrativeStatus = useAppStore((state) => state.administrativeStatus);
   const defaultViewportEnabled = useAppStore((state) => state.defaultViewportEnabled);
@@ -34,10 +44,54 @@ export function useMapCamera(context: MapScope) {
   const defaultAdministrativeIds = useAppStore((state) => state.defaultAdministrativeIds);
   const defaultAdministrativeSaveRequest = useAppStore((state) => state.defaultAdministrativeSaveRequest);
   const drawSearchTarget = useAppStore((state) => state.drawSearchTarget);
+  const animateGlobalTransition = (map: maplibregl.Map, target: maplibregl.CameraOptions, intermediate?: maplibregl.CameraOptions) => {
+    if (globalTransitionFrameRef.current !== null) window.cancelAnimationFrame(globalTransitionFrameRef.current);
+    const targets = intermediate ? [intermediate, target] : [target];
+    const legDuration = GLOBAL_OVERVIEW_TRANSITION_DURATION_MS / targets.length;
+    let legIndex = 0;
+    const runLeg = () => {
+      const start = map.getCenter();
+      const startZoom = map.getZoom();
+      const startPitch = map.getPitch();
+      const startBearing = map.getBearing();
+      const legTarget = targets[legIndex];
+      const end = legTarget.center ? maplibregl.LngLat.convert(legTarget.center) : start;
+      const endZoom = typeof legTarget.zoom === "number" ? legTarget.zoom : startZoom;
+      const endPitch = typeof legTarget.pitch === "number" ? legTarget.pitch : startPitch;
+      const endBearing = typeof legTarget.bearing === "number" ? legTarget.bearing : startBearing;
+      const startedAt = performance.now();
+      const tick = (now: number) => {
+        const linearProgress = Math.min(1, (now - startedAt) / legDuration);
+        // Zoom is exponential perceptually, so a linear camera interpolation
+        // makes the transition feel front-loaded. Smoothstep keeps each leg
+        // balanced while preserving the exact configured total duration.
+        const progress = linearProgress * linearProgress * (3 - 2 * linearProgress);
+        map.jumpTo({
+          center: [start.lng + (end.lng - start.lng) * progress, start.lat + (end.lat - start.lat) * progress],
+          zoom: startZoom + (endZoom - startZoom) * progress,
+          pitch: startPitch + (endPitch - startPitch) * progress,
+          bearing: startBearing + (endBearing - startBearing) * progress,
+        });
+        if (progress < 1) {
+          globalTransitionFrameRef.current = window.requestAnimationFrame(tick);
+        } else if (legIndex < targets.length - 1) {
+          legIndex += 1;
+          runLeg();
+        } else {
+          globalTransitionFrameRef.current = null;
+        }
+      };
+      globalTransitionFrameRef.current = window.requestAnimationFrame(tick);
+    };
+    runLeg();
+  };
   const goHome = useCallback(() => {
     const map = mapRef.current;
     if (!map) return;
     const state = useAppStore.getState();
+    const transitionDuration = map.getZoom() < REGIONAL_PRESENTATION_ZOOM
+      ? GLOBAL_OVERVIEW_TRANSITION_DURATION_MS
+      : HOME_CITY_TRANSITION_DURATION_MS;
 
     if (homeTransitionTimeoutRef.current !== null) {
       window.clearTimeout(homeTransitionTimeoutRef.current);
@@ -45,30 +99,51 @@ export function useMapCamera(context: MapScope) {
     }
     isHomeTransitionActiveRef.current = false;
 
+    const vietnamOverviewCamera: maplibregl.CameraOptions = { center: VIETNAM_OVERVIEW_CENTER, zoom: VIETNAM_OVERVIEW_ZOOM, pitch: 0, bearing: 0 };
+
+    // Từ khung toàn cầu về Home luôn đi qua toàn cảnh Việt Nam trước.
+    if (map.getZoom() < REGIONAL_PRESENTATION_ZOOM) {
+      map.stop();
+      if (state.defaultViewportEnabled && state.defaultViewport) {
+        if (state.defaultAdministrativeIds.length > 0) setMobileHomePanBounds(map, state.administrativeUnits);
+        else map.setMaxBounds(REGIONAL_OPERATIONAL_BOUNDS);
+        animateGlobalTransition(map, state.defaultViewport, vietnamOverviewCamera);
+        return;
+      }
+      setMobileHomePanBounds(map, state.administrativeUnits);
+      const overviewCamera = map.cameraForBounds(getHaiphongOverviewBounds(state.administrativeUnits), {
+        padding: getHaiphongOverviewPadding(),
+        bearing: 0,
+        pitch: 0,
+      });
+      if (overviewCamera) animateGlobalTransition(map, overviewCamera, vietnamOverviewCamera);
+      return;
+    }
+
     if (state.defaultViewportEnabled && state.defaultViewport) {
       if (state.defaultAdministrativeIds.length > 0) {
         setMobileHomePanBounds(map, state.administrativeUnits);
         if (window.matchMedia("(max-width: 760px)").matches) {
-          fitMobileHomeOverview(map, state.administrativeUnits, HOME_CITY_TRANSITION_DURATION_MS);
+          fitMobileHomeOverview(map, state.administrativeUnits, transitionDuration);
           return;
         }
         isHomeTransitionActiveRef.current = true;
-        fitHaiphongOverview(map, state.administrativeUnits, HOME_CITY_TRANSITION_DURATION_MS);
+        fitHaiphongOverview(map, state.administrativeUnits, transitionDuration);
         homeTransitionTimeoutRef.current = window.setTimeout(() => {
           homeTransitionTimeoutRef.current = null;
           const latestState = useAppStore.getState();
           isHomeTransitionActiveRef.current = false;
           if (!latestState.defaultViewportEnabled || !latestState.defaultViewport || latestState.defaultAdministrativeIds.length === 0) return;
-          map.easeTo({ ...latestState.defaultViewport, duration: HOME_CITY_TRANSITION_DURATION_MS });
-        }, HOME_CITY_TRANSITION_DURATION_MS + HOME_CITY_PAUSE_MS);
+          map.easeTo({ ...latestState.defaultViewport, duration: transitionDuration });
+        }, transitionDuration + HOME_CITY_PAUSE_MS);
         return;
       }
       map.setMaxBounds(REGIONAL_OPERATIONAL_BOUNDS);
-      map.easeTo({ ...state.defaultViewport, duration: 800 });
+      map.easeTo({ ...state.defaultViewport, duration: transitionDuration });
       return;
     }
     setMobileHomePanBounds(map, state.administrativeUnits);
-    fitHaiphongOverview(map, state.administrativeUnits, HOME_CITY_TRANSITION_DURATION_MS);
+    fitHaiphongOverview(map, state.administrativeUnits, transitionDuration);
   }, []);
 
   const goHomeTilted = useCallback(() => {
@@ -110,6 +185,11 @@ export function useMapCamera(context: MapScope) {
     const fitCityOverview = () => {
       const map = mapRef.current;
       if (!map) return;
+
+      // Khi đang ở khung toàn cầu, việc mở menu HNTH/lớp bản đồ không được
+      // tự kéo camera về Hải Phòng. Nếu không, sự kiện này làm phím `.` có
+      // cảm giác bị chạy lại ở các menu khác HUB dù handler phím đã bỏ qua.
+      if (isAtGlobalOverviewZoom(map)) return;
 
       if (homeTransitionTimeoutRef.current !== null) {
         window.clearTimeout(homeTransitionTimeoutRef.current);
@@ -171,12 +251,46 @@ export function useMapCamera(context: MapScope) {
     return () => { for (const name of interactions) canvas.removeEventListener(name, stopOrbit); stopOrbit(); };
   }, [isMapReady, stopOrbit]);
 
+  // Ở khung tổng quan toàn cầu, bỏ lớp làm tối quanh Hải Phòng và toàn bộ
+  // nhãn tỉnh để nền vệ tinh không bị biến thành một mảng tối/nhiễu nhãn.
+  // Dùng sự kiện zoom nên mọi cách zoom vào (chuột, nút điều khiển, phím tắt)
+  // đều khôi phục lại cùng một trạng thái ở mốc 2.0.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!isMapReady || !map) return;
+    const syncGlobalOverviewPresentation = () => {
+      const isRegionalView = map.getZoom() >= REGIONAL_PRESENTATION_ZOOM;
+      const mask = map.getLayer("haiphong-outside-mask");
+      if (mask) {
+        const dimOutsideHaiphong = useAppStore.getState().dimOutsideHaiphong;
+        map.setLayoutProperty("haiphong-outside-mask", "visibility", dimOutsideHaiphong && isRegionalView ? "visible" : "none");
+      }
+      for (const marker of vietnamProvinceLabelMarkersRef.current) {
+        marker.getElement().style.display = isRegionalView ? "" : "none";
+      }
+    };
+    map.on("zoom", syncGlobalOverviewPresentation);
+    syncGlobalOverviewPresentation();
+    return () => { map.off("zoom", syncGlobalOverviewPresentation); };
+  }, [isMapReady]);
+
   const easeToPreset = (preset: CameraPreset) => {
     const map = mapRef.current;
     if (!map) return;
+    const transitionDuration = map.getZoom() < REGIONAL_PRESENTATION_ZOOM
+      ? GLOBAL_OVERVIEW_TRANSITION_DURATION_MS
+      : HOME_CITY_TRANSITION_DURATION_MS;
     map.stop();
     map.setMaxBounds(null);
-    map.easeTo({ ...preset, duration: HOME_CITY_TRANSITION_DURATION_MS });
+    if (map.getZoom() < REGIONAL_PRESENTATION_ZOOM) {
+      animateGlobalTransition(
+        map,
+        preset,
+        { center: VIETNAM_OVERVIEW_CENTER, zoom: VIETNAM_OVERVIEW_ZOOM, pitch: 0, bearing: 0 },
+      );
+      return;
+    }
+    map.easeTo({ ...preset, duration: transitionDuration });
   };
 
   // Góc camera (zoom/nghiêng/xoay) ghi lại mỗi lần Home chạy xong, để biết camera có đang ở mức Home không.
@@ -192,9 +306,11 @@ export function useMapCamera(context: MapScope) {
 
   // Về Home rồi ghi lại zoom/góc khi tới nơi; `then` chạy sau khi camera dừng.
   const goHomeAndRecord = (then?: () => void) => {
+    const fromGlobalOverview = (mapRef.current?.getZoom() ?? REGIONAL_PRESENTATION_ZOOM) < REGIONAL_PRESENTATION_ZOOM;
+    const transitionDuration = fromGlobalOverview ? GLOBAL_OVERVIEW_TRANSITION_DURATION_MS : HOME_CITY_TRANSITION_DURATION_MS;
     goHome();
     // Home có thể gồm 2 chặng (toàn TP -> dừng -> khung mặc định); chờ hết chặng cuối.
-    const delay = homeTransitionTimeoutRef.current !== null ? HOME_CITY_TRANSITION_DURATION_MS * 2 + HOME_CITY_PAUSE_MS : HOME_CITY_TRANSITION_DURATION_MS;
+    const delay = homeTransitionTimeoutRef.current !== null ? transitionDuration * 2 + HOME_CITY_PAUSE_MS : transitionDuration;
     window.setTimeout(() => {
       const map = mapRef.current;
       if (map) homeCameraRef.current = { zoom: map.getZoom(), pitch: map.getPitch(), bearing: map.getBearing() };
@@ -213,6 +329,24 @@ export function useMapCamera(context: MapScope) {
     const onKeyDown = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null;
       if (target?.isContentEditable || target?.tagName === "INPUT" || target?.tagName === "TEXTAREA" || target?.tagName === "SELECT") return;
+      const isNumpadDecimal = event.code === "NumpadDecimal"
+        || event.code === "Decimal"
+        || (event.location === KeyboardEvent.DOM_KEY_LOCATION_NUMPAD && event.key === ".");
+      if (isNumpadDecimal) {
+        const map = mapRef.current;
+        if (!map) return;
+        event.preventDefault();
+        // Đã ở đúng khung toàn cầu thì phím . không làm lại animation
+        // zoom ra rồi quay lại chính vị trí 1.9 một cách thừa thãi.
+        if (isAtGlobalOverviewZoom(map)) return;
+        stopOrbit();
+        map.stop();
+        // Cho phép lùi qua giới hạn khung vận hành hiện tại để hiển thị toàn cầu.
+        map.setMaxBounds(null);
+        map.setMinZoom(Math.min(map.getMinZoom(), GLOBAL_OVERVIEW_ZOOM));
+        animateGlobalTransition(map, { center: GLOBAL_OVERVIEW_CENTER, zoom: GLOBAL_OVERVIEW_ZOOM, pitch: 0, bearing: 0 }, { center: VIETNAM_OVERVIEW_CENTER, zoom: VIETNAM_OVERVIEW_ZOOM, pitch: 0, bearing: 0 });
+        return;
+      }
       if (event.key !== lastShortcutKeyRef.current) {
         orbitPressCountRef.current = 0;
         homeTiltedPressCountRef.current = 0;
@@ -229,6 +363,20 @@ export function useMapCamera(context: MapScope) {
       }
       // Shift+0/Shift+1 ở hàng số; ở bàn phím số khi bật NumLock, Windows gửi Shift+số thành
       // phím điều hướng ("Insert"/"End") nhưng code vẫn là Numpad0/Numpad1.
+      // Shift+5 lưu Home chuẩn. Giữ Ctrl+Shift+0 như bí danh nếu trình duyệt vẫn
+      // chuyển được tổ hợp này tới ứng dụng, nhưng Shift+5 là phím tắt chính.
+      const isShiftFive = event.shiftKey && (event.code === "Digit5" || event.code === "Numpad5" || event.key === "5" || event.key === "%");
+      const saveHome = isShiftFive || ((event.code === "Digit0" || event.code === "Numpad0") && event.ctrlKey && event.shiftKey);
+      if (saveHome) {
+        event.preventDefault();
+        const map = mapRef.current;
+        if (!map) return;
+        const center = map.getCenter();
+        const preset: CameraPreset = { center: [Number(center.lng.toFixed(6)), Number(center.lat.toFixed(6))], zoom: Number(map.getZoom().toFixed(2)), pitch: Number(map.getPitch().toFixed(1)), bearing: Number(map.getBearing().toFixed(1)) };
+        try { window.localStorage.setItem(homeCameraPresetKey, JSON.stringify(preset)); } catch { /* localStorage bị chặn */ }
+        window.alert(`Đã lưu vị trí Home chuẩn (Shift+5): Tâm ${preset.center[1]}, ${preset.center[0]} · zoom ${preset.zoom} · nghiêng ${preset.pitch}° · xoay ${preset.bearing}°`);
+        return;
+      }
       const saveDigit = (["0", "1"] as const).find((digit) => (event.code === `Digit${digit}` && event.shiftKey) || (event.code === `Numpad${digit}` && event.key !== digit));
       if (saveDigit) {
         event.preventDefault();
@@ -244,8 +392,11 @@ Tâm ${preset.center[1]}, ${preset.center[0]} · zoom ${preset.zoom} · nghiêng
       if (event.key === "Home" || event.key === "0" || event.key === "1") stopOrbit();
       if (event.key === "Home" || event.key === "0") {
         event.preventDefault();
-        // Home luôn về toàn cảnh; riêng phím 0 bấm chẵn lần liên tiếp thì về góc lưu bằng Shift+0.
-        const preset = event.key === "0" && ++homePressCountRef.current % 2 === 0 ? readCameraPreset("0") : null;
+        // Phím 0 lẻ lần về Home chuẩn đã lưu bằng Ctrl+Shift+0; lần chẵn về góc lưu bằng Shift+0.
+        const isEvenZeroPress = event.key === "0" && ++homePressCountRef.current % 2 === 0;
+        const preset = event.key === "0"
+          ? (isEvenZeroPress ? readCameraPreset("0") : readHomeCameraPreset())
+          : null;
         if (preset) easeToPreset(preset);
         else goHomeAndRecord();
         return;

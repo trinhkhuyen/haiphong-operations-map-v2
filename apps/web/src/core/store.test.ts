@@ -34,12 +34,12 @@ describe("persist — hình dạng dữ liệu đã lưu (khóa trước khi tá
 
   it("giữ nguyên tên key và version", () => {
     expect(options.name).toBe("haiphong-map-display-preferences");
-    expect(options.version).toBe(4);
+    expect(options.version).toBe(6);
   });
 
   it("chỉ lưu đúng các trường này", () => {
     expect(Object.keys(options.partialize!(useAppStore.getState()) as object).sort()).toEqual([
-      "administrativeFillColor", "administrativeFillOpacity", "administrativeOutlineColor", "baseMapMode", "clusterLevel",
+      "activePanel", "administrativeFillColor", "administrativeFillOpacity", "administrativeOutlineColor", "baseMapMode", "cameraDevices", "clusterLevel",
       "defaultAdministrativeIds", "defaultViewport", "defaultViewportEnabled", "dimOutsideHaiphong",
       "drawFillColor", "drawFillOpacity", "drawOutlineColor",
       "hnthAreaStyles", "hnthAreaVisible", "hnthLineStyles", "hnthLineVisible", "hnthPointOverrides",

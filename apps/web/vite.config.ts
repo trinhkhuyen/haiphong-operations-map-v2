@@ -4,6 +4,9 @@ import react from "@vitejs/plugin-react";
 
 export default defineConfig({
   plugins: [react()],
+  // GitHub Pages serves this repository below /<repository-name>/. Local dev
+  // remains rooted at /, while the workflow injects the Pages path explicitly.
+  base: process.env.VITE_BASE_PATH || "/",
   server: {
     port: 5173,
     proxy: {

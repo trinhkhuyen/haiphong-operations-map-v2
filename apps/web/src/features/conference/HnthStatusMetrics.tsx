@@ -34,7 +34,6 @@ export function HnthStatusMetrics() {
   const [testLines, setTestLines] = useState<string[]>([]);
   const [testSequencePosition, setTestSequencePosition] = useState<number | null>(null);
   const [testPopupPosition, setTestPopupPosition] = useState<{ left: number; top: number } | null>(null);
-  const hasAppliedDefaultDetailStatus = useRef(false);
   const testPopupRef = useRef<HTMLElement | null>(null);
   const testDragRef = useRef<{
     pointerId: number;
@@ -72,17 +71,6 @@ export function HnthStatusMetrics() {
     if (!summaryLine) return null;
     return summaryLine.includes("Lost = 0") ? "success" : "failed";
   }, [testLines]);
-
-  useEffect(() => {
-    // Mỗi lần mở menu HNTH (kể cả sau khi reload), ưu tiên mở danh sách
-    // Mất kết nối sau khi dữ liệu điểm nhánh đã nạp xong. Cờ này bảo đảm
-    // người dùng vẫn có thể đóng popup mà nó không tự bật lại trong cùng phiên mở menu.
-    if (hasAppliedDefaultDetailStatus.current || points.length === 0) return;
-    hasAppliedDefaultDetailStatus.current = true;
-    // Mobile vẫn giữ thanh 4 trạng thái, nhưng không tự mở bảng chi tiết
-    // Mất kết nối vì popup che phần lớn vùng bản đồ.
-    if (grouped.lost.length > 0 && !window.matchMedia("(max-width: 760px)").matches) setDetailStatus("lost");
-  }, [grouped.lost.length, points.length]);
 
   useEffect(() => {
     return onAppEvent("hnth:test-point", (detail) => {

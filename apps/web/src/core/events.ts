@@ -23,6 +23,8 @@ export type AdministrativePulseDetail = {
 };
 
 export type AppEventMap = {
+  /** Mở một menu nghiệp vụ từ các thành phần nổi trên bản đồ, ví dụ HUB. */
+  "ui:open-panel": "layers" | "zones" | "saved" | "routing" | "conference" | "camera" | "agents" | "hub";
   /** Refresh token thất bại; App đưa người dùng về Khách. */
   "hnth:auth-expired": undefined;
   "hnth:open-login": undefined;
@@ -35,6 +37,14 @@ export type AppEventMap = {
   /** Mở popup Test/Ping và gửi lệnh test-point tới Agent. */
   "hnth:test-point": { pointId?: string; ipAddress?: string; runId?: number };
   "hnth:open-point-log": { pointId?: string };
+  /** Gửi yêu cầu kiểm tra một đầu ghi xuống Camera-Agent. */
+  "camera:probe": { deviceId: string };
+  /** Ngắt trạng thái kết nối đầu ghi theo yêu cầu người dùng. */
+  "camera:disconnect": { deviceId: string };
+  /** Mở rộng các kênh online của đầu ghi trên bản đồ. */
+  "camera:expand": { deviceId: string };
+  /** Đóng toàn bộ lớp phủ của menu Camera khi người dùng nhấn Escape. */
+  "camera:close-overlays": undefined;
   // Đưa camera về khung tổng quan toàn Thành phố Hải Phòng. Tách khỏi nút Home
   // (có thể đi tới khung địa giới mặc định mà người dùng đã lưu).
   "map:fit-haiphong-overview": undefined;

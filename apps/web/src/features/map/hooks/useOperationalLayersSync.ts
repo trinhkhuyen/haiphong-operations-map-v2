@@ -53,6 +53,9 @@ export function useOperationalLayersSync(context: MapScope) {
           ? "none"
           : layer.visible ? "visible" : "none";
         setOperationalLayerVisibility(map, layer.id, visibility);
+      } else {
+        // Camera dùng bản đồ TP riêng; không để lớp giám sát HNTH lọt sang màn hình Camera.
+        setOperationalLayerVisibility(map, layer.id, activePanel === "conference" ? "visible" : "none");
       }
     }
     // Dữ liệu nghiệp vụ phải nằm trên lớp làm mờ và lớp nền địa giới.

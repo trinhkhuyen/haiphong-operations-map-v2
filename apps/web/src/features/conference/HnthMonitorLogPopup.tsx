@@ -29,6 +29,20 @@ function writeLogLayout(layout: LogLayout) {
   try { window.localStorage.setItem(LOG_LAYOUT_KEY, JSON.stringify(layout)); } catch { /* localStorage bị chặn */ }
 }
 
+// Chuyển động của từng điểm cầu: 2/3 thời gian đầu tăng tốc dần, 1/3 cuối
+// giảm tốc dần trước khi dừng. Hai đoạn có cùng vận tốc tại điểm nối để không
+// tạo thêm một cú giật giữa chừng khi ticker chuyển sang điểm mới.
+function easeAccelerationTwoThirds(progress: number) {
+  const t = Math.min(1, Math.max(0, progress));
+  const accelerationPart = 2 / 3;
+  if (t < accelerationPart) {
+    const local = t / accelerationPart;
+    return accelerationPart * local ** 3;
+  }
+  const local = (t - accelerationPart) / (1 - accelerationPart);
+  return accelerationPart + (1 - accelerationPart) * (1 - (1 - local) ** 3);
+}
+
 export function HnthMonitorLogPopup({ allPoints, onFocusPoint }: { allPoints: HnthPointFeature[]; onFocusPoint: (point: HnthPointFeature) => void }) {
   const updateHnthPoint = useAppStore((state) => state.updateHnthPoint);
   const [continuousMonitoring, setContinuousMonitoring] = useState(false);
@@ -99,6 +113,12 @@ export function HnthMonitorLogPopup({ allPoints, onFocusPoint }: { allPoints: Hn
   const monitorLogListRef = useRef<HTMLDivElement | null>(null);
   const logSeqRef = useRef(0);
   const scrollAnimationRef = useRef(0);
+  const scrollAnimationLastAtRef = useRef(0);
+  const scrollPointQueueRef = useRef<number[]>([]);
+  const scrollLastQueuedSeqRef = useRef(0);
+  const scrollSegmentStartedAtRef = useRef(0);
+  const scrollSegmentFromRef = useRef(0);
+  const scrollSegmentTargetRef = useRef(0);
   const sectionRef = useRef<HTMLElement | null>(null);
   // Kéo thả log trong suốt: nhấn giữ chuột trái và kéo (quá 5px mới tính là kéo, nhấn rồi thả
   // tại chỗ vẫn là bấm chọn dòng). Thả ở dải dưới cùng bản đồ -> 1 hàng ở cạnh dưới; còn lại
@@ -200,26 +220,117 @@ export function HnthMonitorLogPopup({ allPoints, onFocusPoint }: { allPoints: Hn
   }, [allPoints, continuousMonitoring, monitorConcurrency, updateHnthPoint]);
 
   useEffect(() => {
-    if (!monitorAutoFocus) return;
+    const newestSeq = monitorLog.reduce((max, item) => Math.max(max, item.seq ?? 0), 0);
+    if (!monitorAutoFocus) {
+      window.cancelAnimationFrame(scrollAnimationRef.current);
+      scrollAnimationRef.current = 0;
+      scrollAnimationLastAtRef.current = 0;
+      scrollPointQueueRef.current = [];
+      scrollSegmentStartedAtRef.current = 0;
+      // Khi bật lại AutoFocus, chỉ các điểm phát sinh sau thời điểm bật mới
+      // được đưa vào hàng đợi; không chạy lại toàn bộ log cũ.
+      scrollLastQueuedSeqRef.current = newestSeq;
+      return;
+    }
     const list = monitorLogListRef.current;
     if (!list) return;
-    if (!(monitorLogOverlay && overlayAtBottom)) { list.scrollTop = list.scrollHeight; return; }
-    // Log 1 hàng ở cạnh dưới: trượt mượt sang trái tới dòng mới nhất (kiểu chữ chạy) thay vì nhảy.
-    // Batch mới đến giữa chừng thì nối tiếp từ vị trí đang trượt.
-    window.cancelAnimationFrame(scrollAnimationRef.current);
-    const from = list.scrollLeft;
-    const to = list.scrollWidth - list.clientWidth;
-    if (to - from < 1) return;
-    const startedAt = performance.now();
-    const duration = Math.min(1200, 300 + (to - from) * 1.5);
+    if (!(monitorLogOverlay && overlayAtBottom)) {
+      window.cancelAnimationFrame(scrollAnimationRef.current);
+      scrollAnimationRef.current = 0;
+      scrollAnimationLastAtRef.current = 0;
+      scrollPointQueueRef.current = [];
+      scrollSegmentStartedAtRef.current = 0;
+      scrollLastQueuedSeqRef.current = newestSeq;
+      list.scrollTop = list.scrollHeight;
+      return;
+    }
+
+    // Một batch có thể chứa rất nhiều luồng/điểm. Không lấy scrollWidth cuối
+    // làm đích ngay (cách đó khiến một batch lớn kéo màn hình liên tục). Mỗi
+    // seq mới tương ứng đúng một điểm; xếp chúng vào hàng đợi và chỉ xử lý
+    // điểm kế tiếp sau khi điểm hiện tại đã tới vị trí cuối của nó.
+    const newSeqs = monitorLog
+      .map((item) => item.seq ?? 0)
+      .filter((seq) => seq > scrollLastQueuedSeqRef.current)
+      .sort((a, b) => a - b);
+    if (newSeqs.length) {
+      scrollPointQueueRef.current.push(...newSeqs);
+      scrollLastQueuedSeqRef.current = Math.max(scrollLastQueuedSeqRef.current, ...newSeqs);
+    }
+
+    if (scrollAnimationRef.current || !scrollPointQueueRef.current.length) return;
+    scrollAnimationLastAtRef.current = performance.now();
     const step = (now: number) => {
-      const t = Math.min(1, (now - startedAt) / duration);
-      list.scrollLeft = from + (to - from) * (1 - (1 - t) ** 3);
-      if (t < 1) scrollAnimationRef.current = window.requestAnimationFrame(step);
+      const currentList = monitorLogListRef.current;
+      if (!currentList || !monitorAutoFocus || !monitorLogOverlay || !overlayAtBottom) {
+        scrollAnimationRef.current = 0;
+        scrollAnimationLastAtRef.current = 0;
+        scrollPointQueueRef.current = [];
+        scrollSegmentStartedAtRef.current = 0;
+        return;
+      }
+      const currentSeq = scrollPointQueueRef.current[0];
+      const row = currentSeq
+        ? currentList.querySelector<HTMLElement>(`[data-monitor-seq="${currentSeq}"]`)
+        : null;
+      if (!row) {
+        // Có thể điểm đã bị cắt khỏi cửa sổ 1000 dòng trước khi được vẽ.
+        scrollPointQueueRef.current.shift();
+        if (!scrollPointQueueRef.current.length) {
+          scrollAnimationRef.current = 0;
+          scrollAnimationLastAtRef.current = 0;
+          return;
+        }
+        scrollAnimationRef.current = window.requestAnimationFrame(step);
+        return;
+      }
+
+      // Tính đích theo hình học của đúng một dòng mới, không dùng scrollWidth
+      // và không coi một khoảng pixel là một "điểm". Đích là vị trí vừa đủ để
+      // dòng này hiện trọn ở mép phải của ticker.
+      if (!scrollSegmentStartedAtRef.current) {
+        const listRect = currentList.getBoundingClientRect();
+        const rowRect = row.getBoundingClientRect();
+        const maxScroll = Math.max(0, currentList.scrollWidth - currentList.clientWidth);
+        const target = Math.max(0, Math.min(maxScroll, currentList.scrollLeft + rowRect.right - listRect.right));
+        scrollSegmentFromRef.current = currentList.scrollLeft;
+        scrollSegmentTargetRef.current = target;
+        scrollSegmentStartedAtRef.current = now;
+      }
+
+      const from = scrollSegmentFromRef.current;
+      const target = scrollSegmentTargetRef.current;
+      const distance = target - from;
+      // Mỗi điểm có một nhịp cố định; không phụ thuộc số pixel hay số luồng
+      // trong batch. Điểm tiếp theo chỉ được lấy sau khi đoạn này kết thúc.
+      const t = Math.min(1, Math.max(0, (now - scrollSegmentStartedAtRef.current) / 360));
+      const eased = easeAccelerationTwoThirds(t);
+      currentList.scrollLeft = from + distance * eased;
+      if (t < 1) {
+        scrollAnimationRef.current = window.requestAnimationFrame(step);
+        return;
+      }
+      currentList.scrollLeft = target;
+      scrollSegmentStartedAtRef.current = 0;
+      scrollPointQueueRef.current.shift();
+      if (!scrollPointQueueRef.current.length) {
+        scrollAnimationRef.current = 0;
+        scrollAnimationLastAtRef.current = 0;
+        return;
+      }
+      scrollAnimationLastAtRef.current = now;
+      scrollAnimationRef.current = window.requestAnimationFrame(step);
     };
     scrollAnimationRef.current = window.requestAnimationFrame(step);
-    return () => window.cancelAnimationFrame(scrollAnimationRef.current);
   }, [monitorAutoFocus, monitorLog, monitorLogOverlay, overlayAtBottom]);
+
+  useEffect(() => () => {
+    window.cancelAnimationFrame(scrollAnimationRef.current);
+    scrollAnimationRef.current = 0;
+    scrollAnimationLastAtRef.current = 0;
+    scrollPointQueueRef.current = [];
+    scrollSegmentStartedAtRef.current = 0;
+  }, []);
 
   const exportMonitorLog = () => {
     const text = monitorLog.map((item) => `${item.time}\t${item.name}\t${item.ip}\t${item.status}`).join("\n");
@@ -240,7 +351,7 @@ export function HnthMonitorLogPopup({ allPoints, onFocusPoint }: { allPoints: Hn
       {monitorLog.length === 0 && <small>Đang chờ kết quả từ agent...</small>}
       {monitorLog.map((item, index) => {
         const point = allPoints.find((candidate) => String(candidate.properties?.pointId ?? candidate.id) === item.pointId);
-        return <button className={`hnth-monitor-log-row ${item.status.toLowerCase()}`} key={item.seq ?? `${item.pointId}-${item.timestamp}-${index}`} type="button" onClick={() => { if (point) onFocusPoint(point); }}><i/><span><strong>{item.name}</strong><small>{item.ip} · {item.status} {item.time}</small></span></button>;
+        return <button data-monitor-seq={item.seq ?? undefined} className={`hnth-monitor-log-row ${item.status.toLowerCase()}`} key={item.seq ?? `${item.pointId}-${item.timestamp}-${index}`} type="button" onClick={() => { if (point) onFocusPoint(point); }}><i/><span><strong>{item.name}</strong><small>{item.ip} · {item.status} {item.time}</small></span></button>;
       })}
     </div>}
   </section>;

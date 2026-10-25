@@ -18,6 +18,8 @@ import { useVietnamProvinceBoundaries } from "./hooks/useVietnamProvinceBoundari
 import { useHnthHubPulse } from "./hooks/useHnthHubPulse";
 import { usePresentationBridge } from "./hooks/usePresentationBridge";
 import { HnthExtraCards } from "./HnthExtraCards";
+import { CameraMapOverlays } from "./CameraMapOverlays";
+import { HubOverlay } from "../hub/HubOverlay";
 
 export function MapCanvas() {
   const scope = useMapScope();
@@ -52,7 +54,9 @@ export function MapCanvas() {
   return (
     <>
       <div ref={containerRef} className="map-canvas" aria-label="Bản đồ giám sát Hải Phòng" />
-      <HnthExtraCards mapRef={mapRef} isMapReady={isMapReady} />
+      <HubOverlay mapRef={mapRef} isMapReady={isMapReady} />
+      {activePanel === "conference" && <HnthExtraCards mapRef={mapRef} isMapReady={isMapReady} />}
+      {activePanel === "camera" && <CameraMapOverlays mapRef={mapRef} isMapReady={isMapReady} />}
       <div className="map-navigation-tools" aria-label="Công cụ điều hướng bản đồ">
         {isBaseMapMenuOpen && (
           <div className="base-map-menu" role="menu" aria-label="Chế độ bản đồ">
@@ -98,7 +102,7 @@ export function MapCanvas() {
         />
       )}
       {/* Chi tiết Endpoint gọn (tên, IP, trạng thái) dưới thanh trạng thái, tự tắt sau 5 giây. */}
-      <HnthEndpointCard properties={fixedMapInfo?.kind === "hnth" ? fixedHnthProperties ?? undefined : undefined} selection={fixedMapInfo?.kind === "hnth" ? fixedMapInfo : null} />
+      {activePanel === "conference" && <HnthEndpointCard properties={fixedMapInfo?.kind === "hnth" ? fixedHnthProperties ?? undefined : undefined} selection={fixedMapInfo?.kind === "hnth" ? fixedMapInfo : null} />}
       {activePanel === "zones" && zoneSummary.zoneCount > 0 && (
         <aside className="zone-summary-popup" aria-label="Thông tin tổng hợp đối tượng các lớp">
           <span>THÔNG TIN TỔNG HỢP</span>

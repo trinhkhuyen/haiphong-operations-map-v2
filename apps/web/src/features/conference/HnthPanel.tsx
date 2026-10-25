@@ -475,7 +475,7 @@ export function HnthPanel({ readOnly = false, canRenewLease = !readOnly }: { rea
           <span><strong>Hiển thị sơ đồ kết nối</strong><small>Vàng: chưa kết nối · xanh: kết nối · đỏ: mất kết nối</small></span>
           <input type="checkbox" checked={hnthLineVisible} onChange={(event) => setHnthLineVisible(event.target.checked)} /><i />
         </label>
-        <HnthStatusStyleEditor title="Màu đường kết nối" styles={hnthLineStyles} onChange={setHnthLineStyle} />
+        <HnthStatusStyleEditor title="Màu đường kết nối" styles={hnthLineStyles} onChange={setHnthLineStyle} signalStatuses />
         <label className="outside-mask-toggle hnth-layer-toggle hnth-area-toggle">
           <span><strong>Màu nền xã/phường</strong><small>Tô địa giới theo trạng thái điểm HNTH</small></span>
           <input type="checkbox" checked={hnthAreaVisible} onChange={(event) => setHnthAreaVisible(event.target.checked)} /><i />

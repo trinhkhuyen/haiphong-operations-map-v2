@@ -21,6 +21,20 @@ export const HAIPHONG_FALLBACK_BOUNDS: [[number, number], [number, number]] = [[
 export const REGIONAL_LOADING_CENTER: [number, number] = [105.95, 21.02];
 export const REGIONAL_MIN_ZOOM = 6.25;
 
+// Khung tổng quan thế giới được mở bằng phím dấu chấm trên bàn phím số.
+// Giữ riêng các hằng số này để mốc zoom và khung nhìn không bị lệch giữa
+// camera và các lớp trình bày của bản đồ.
+export const GLOBAL_OVERVIEW_CENTER: [number, number] = [30, 20];
+export const GLOBAL_OVERVIEW_ZOOM = 1.9;
+// Mốc trung gian để camera luôn đi qua toàn cảnh Việt Nam trước khi
+// chuyển tiếp giữa Home Hải Phòng và toàn cảnh thế giới.
+export const VIETNAM_OVERVIEW_CENTER: [number, number] = [106, 16];
+export const VIETNAM_OVERVIEW_ZOOM = 4.6;
+export const REGIONAL_PRESENTATION_ZOOM = 2;
+// Hai chiều chuyển cảnh giữa khung toàn cầu và Home dùng cùng nhịp chậm,
+// để người dùng kịp theo dõi bản đồ đi từ toàn cảnh về Hải Phòng và ngược lại.
+export const GLOBAL_OVERVIEW_TRANSITION_DURATION_MS = 5000;
+
 // Khóa vùng pan để không kéo ra ngoài khu vực dữ liệu cần vận hành. Biên phía
 // đông vẫn bao gồm đặc khu Bạch Long Vĩ và vùng biển lân cận.
 export const REGIONAL_OPERATIONAL_BOUNDS: [[number, number], [number, number]] = [[101.85, 18.25], [110.05, 23.6]];

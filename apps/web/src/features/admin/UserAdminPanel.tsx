@@ -12,6 +12,7 @@ const menus = [
   { id: "saved", label: "Đối tượng đã lưu" },
   { id: "routing", label: "Định tuyến" },
   { id: "conference", label: "HNTH" },
+  { id: "camera", label: "Camera" },
   { id: "agents", label: "Agents" },
 ];
 const allMenuIds = () => menus.map((menu) => menu.id);

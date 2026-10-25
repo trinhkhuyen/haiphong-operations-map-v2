@@ -2,6 +2,7 @@ import { booleanIntersects, booleanPointInPolygon, feature } from "@turf/turf";
 import type { Feature, Geometry, LineString, Point, Polygon } from "geojson";
 import type { AdministrativeUnit, OperationalLayer } from "../../core/types";
 import { sampleLayers } from "./sample-data";
+import { publicAsset } from "../../core/runtime";
 
 interface OsmElement {
   type: "node" | "way" | "relation";
@@ -32,7 +33,7 @@ export async function loadOsmOperationalLayers(units: AdministrativeUnit[], laye
   const snapshotData: Record<string, GeoJSON.FeatureCollection> = {};
   await Promise.all(requestedIds.map(async (id) => {
     try {
-      const response = await fetch(`/data/osm-layers/${encodeURIComponent(id)}.json`, { signal });
+      const response = await fetch(publicAsset(`data/osm-layers/${encodeURIComponent(id)}.json`), { signal });
       if (response.ok) snapshotData[id] = await response.json() as GeoJSON.FeatureCollection;
     } catch (error) {
       if (signal?.aborted) throw error;

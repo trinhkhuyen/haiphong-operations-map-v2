@@ -1,10 +1,12 @@
 import { lazy, Suspense, useEffect, useState } from "react";
-import { Bell, FolderOpen, Layers3, MapPinned, Menu, Pentagon, RadioTower, Route, ShieldCheck, Server } from "lucide-react";
+import { Bell, Camera, FolderOpen, Layers3, MapPinned, Menu, Pentagon, RadioTower, Route, ShieldCheck, Server, Compass } from "lucide-react";
 import { useAppStore } from "../core/store";
-import { emitAppEvent } from "../core/events";
+import { emitAppEvent, onAppEvent } from "../core/events";
 import { MapCanvas } from "../features/map/MapCanvas";
 import { HnthPanel } from "../features/conference/HnthPanel";
+import { CameraPanel } from "../features/camera/CameraPanel";
 import { HnthStatusMetrics } from "../features/conference/HnthStatusMetrics";
+import { CameraStatusMetrics } from "../features/camera/CameraStatusMetrics";
 import { AuthModal } from "../features/auth/AuthModal";
 import { LoginGate } from "../features/auth/LoginGate";
 import { UserMenu } from "../features/auth/UserMenu";
@@ -14,6 +16,8 @@ import { PanelErrorBoundary } from "./PanelErrorBoundary";
 import { SystemStatusBar } from "./SystemStatusBar";
 import { MapTitleClock } from "./MapTitleClock";
 import { useOperationalLayerLoader } from "./useOperationalLayerLoader";
+import { HubPanel } from "../features/hub/HubPanel";
+import { demoMode } from "../core/runtime";
 
 const SIDEBAR_COLLAPSED_KEY = "hnth-sidebar-collapsed";
 
@@ -26,7 +30,14 @@ const RoutingPanel = lazy(() => import("../features/routing/RoutingPanel").then(
 const AgentsPanel = lazy(() => import("../features/agents/AgentsPanel").then((module) => ({ default: module.AgentsPanel })));
 const UserAdminPanel = lazy(() => import("../features/admin/UserAdminPanel").then((module) => ({ default: module.UserAdminPanel })));
 
-type PanelId = "layers" | "zones" | "saved" | "routing" | "conference" | "agents";
+type PanelId = "layers" | "zones" | "saved" | "routing" | "conference" | "camera" | "agents" | "hub";
+
+function StaticDemoPanel({ title }: { title: string }) {
+  return <section className="panel-section">
+    <div className="section-heading"><strong>{title}</strong></div>
+    <p className="panel-help">Bản demo GitHub Pages đang chạy không cần Backend. Bản đồ, HUB, zoom, phím tắt và dữ liệu mẫu vẫn hoạt động bình thường.</p>
+  </section>;
+}
 
 export function App() {
   // Trình chiếu là một client bản đồ độc lập. Nó dùng chính App/MapCanvas và
@@ -52,6 +63,7 @@ export function App() {
   const auth = useAuth();
   const { user, canSeeMenu } = auth;
   const activePanel = useAppStore((state) => state.activePanel);
+  const hubEnabled = useAppStore((state) => state.hubEnabled);
   const setActivePanel = useAppStore((state) => state.setActivePanel);
   const administrativeUnits = useAppStore((state) => state.administrativeUnits);
   const defaultViewportEnabled = useAppStore((state) => state.defaultViewportEnabled);
@@ -95,6 +107,26 @@ export function App() {
     return () => window.cancelAnimationFrame(frameId);
   }, [isSidebarCollapsed]);
 
+  // Escape luôn là phím đóng sidebar trái, không phụ thuộc panel hoặc menu
+  // đang được chọn. Dùng capture để ưu tiên thao tác này trước các handler
+  // của bản đồ và các thư viện tương tác bên trong panel.
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      setIsSidebarCollapsed(true);
+    };
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => window.removeEventListener("keydown", onKeyDown, true);
+  }, []);
+
+  useEffect(() => onAppEvent("ui:open-panel", (panel) => {
+    setActivePanel(panel);
+    if (panel === "layers" || panel === "conference") {
+      window.requestAnimationFrame(() => emitAppEvent("map:fit-haiphong-overview"));
+    }
+  }), [setActivePanel]);
+
   // Phím 9: đóng/mở menu bên trái, giống nút ☰ trên thanh rail.
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -135,7 +167,9 @@ export function App() {
           {railButton("saved", "Đối tượng đã lưu", <FolderOpen size={20}/>)}
           {railButton("routing", "Định tuyến", <Route size={20}/>)}
           {railButton("conference", "Hội nghị truyền hình", <RadioTower size={20}/>)}
+          {railButton("camera", "Quản lý Camera", <Camera size={20}/>)}
           {railButton("agents", "Quản lý Agents", <Server size={20}/>)}
+          {railButton("hub", "Cấu hình HUB bản đồ", <Compass size={20}/>)}
         </nav>
         {user?.role === "admin" && <button className="rail-shield" onClick={() => setShowUserAdmin(true)} aria-label="Quản trị tài khoản" title="Quản trị tài khoản"><ShieldCheck size={20}/></button>}
       </aside>
@@ -147,14 +181,17 @@ export function App() {
           {activePanel === "saved" && <SavedObjectsPanel />}
           {activePanel === "routing" && <RoutingPanel />}
         </Suspense>
-        <div style={{ display: activePanel === "conference" || isPresentationMode ? undefined : "none" }}><HnthPanel readOnly={isPresentationMode || !user || user.role === "viewer"} canRenewLease={Boolean(user) && user?.role !== "viewer"} /></div>
-        {activePanel === "agents" && <PanelErrorBoundary><Suspense fallback={null}><AgentsPanel /></Suspense></PanelErrorBoundary>}
+        <div style={{ display: activePanel === "conference" || isPresentationMode ? undefined : "none" }}>{demoMode ? <StaticDemoPanel title="HỘI NGHỊ TRUYỀN HÌNH" /> : <HnthPanel readOnly={isPresentationMode || !user || user.role === "viewer"} canRenewLease={Boolean(user) && user?.role !== "viewer"} />}</div>
+        {activePanel === "camera" && (demoMode ? <StaticDemoPanel title="QUẢN LÝ CAMERA" /> : <PanelErrorBoundary><CameraPanel readOnly={!user || user.role === "viewer"} /></PanelErrorBoundary>)}
+        {activePanel === "agents" && (demoMode ? <StaticDemoPanel title="QUẢN LÝ AGENTS" /> : <PanelErrorBoundary><Suspense fallback={null}><AgentsPanel /></Suspense></PanelErrorBoundary>)}
+          {activePanel === "hub" && <HubPanel />}
       </aside>
 
       <section className="map-area">
         <PanelErrorBoundary><MapCanvas /></PanelErrorBoundary>
-        <div className="map-title-card"><div className="map-title-info"><span>BẢN ĐỒ VẬN HÀNH</span><strong>{mapOperationTitle}</strong><small>20.8449° N, 106.6881° E</small></div><MapTitleClock /></div>
-        <HnthStatusMetrics />
+        {!hubEnabled && <div className="map-title-card"><div className="map-title-info"><span>BẢN ĐỒ VẬN HÀNH</span><strong>{mapOperationTitle}</strong><small>20.8449° N, 106.6881° E</small></div><MapTitleClock /></div>}
+          {activePanel === "conference" && !demoMode && <HnthStatusMetrics />}
+          {activePanel === "camera" && <CameraStatusMetrics />}
         {showUserAdmin && <Suspense fallback={null}><UserAdminPanel onClose={() => setShowUserAdmin(false)} /></Suspense>}
         <AuthModal auth={auth} />
       </section>

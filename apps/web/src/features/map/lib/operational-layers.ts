@@ -53,7 +53,11 @@ export function raiseOperationalLayers(map: MapLibreMap, layers: ReturnType<type
   for (const layer of layers) {
     if (!layer.visible || layer.data.features.length === 0) continue;
     // Thứ tự này giữ viền đệm dưới nét đường, số cụm trên vòng tròn cụm.
-    for (const suffix of ["fill", "line-glow", "line-casing", "line", "cluster", "point", "hub-halo", "hub-point", "branch-point", "cluster-count"]) {
+    // HNTH có lớp chấm tín hiệu riêng. Phải nâng cả `signal-points` lên trên
+    // lớp `haiphong-outside-mask`; nếu thiếu suffix này, chấm trên tuyến đi
+    // ra ngoài Hải Phòng (đặc biệt Bạch Long Vĩ) sẽ bị phủ tối dù nét tuyến
+    // đã được nâng lên. Giữ ghi chú này để tránh hồi quy khi thêm layer HNTH.
+    for (const suffix of ["fill", "line-glow", "line-casing", "line", "cluster", "point", "hub-halo", "hub-point", "branch-point", "signal", "signal-points", "cluster-count"]) {
       const id = `${layer.id}-${suffix}`;
       if (map.getLayer(id)) map.moveLayer(id);
     }
@@ -61,7 +65,7 @@ export function raiseOperationalLayers(map: MapLibreMap, layers: ReturnType<type
 }
 
 export function setOperationalLayerVisibility(map: MapLibreMap, layerId: string, visibility: "visible" | "none") {
-  for (const suffix of ["fill", "line-glow", "line-casing", "line", "point", "hub-halo", "hub-point", "branch-point", "cluster", "cluster-count"]) {
+  for (const suffix of ["fill", "line-glow", "line-casing", "line", "point", "hub-halo", "hub-point", "branch-point", "signal", "signal-points", "cluster", "cluster-count"]) {
     const id = `${layerId}-${suffix}`;
     if (map.getLayer(id)) map.setLayoutProperty(id, "visibility", visibility);
   }
@@ -71,11 +75,13 @@ export function addOperationalLayer(map: MapLibreMap, layer: ReturnType<typeof u
   // React có thể chạy lại effect đồng bộ lớp khi đổi menu (đặc biệt trong
   // StrictMode). MapLibre không cho phép addSource trùng id; coi lớp đã có
   // source là đã được khởi tạo để tránh làm sập toàn bộ MapCanvas.
-  if (map.getSource(layer.id)) return;
   if (layer.id === HNTH_LAYER_ID) {
+    // HNTH has a dedicated signal layer. Even when its base source already
+    // exists, let addHnthLayer repair a partially initialized cold start.
     addHnthLayer(map, layer);
     return;
   }
+  if (map.getSource(layer.id)) return;
   const isLinearLayer = layer.category === "hydrology" || layer.geometryMode === "line";
   const isUbndLayer = layer.id === "government-ubnd";
   map.addSource(layer.id, { type: "geojson", data: layer.data, cluster: !isLinearLayer, clusterMaxZoom: 13, clusterRadius: clusterRadiusForLevel(clusterLevel) });

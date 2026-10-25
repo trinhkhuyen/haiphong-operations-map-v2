@@ -36,7 +36,7 @@ export function useAdministrativeLayers(context: MapScope) {
       (map.getSource("haiphong-outside-mask") as GeoJSONSource).setData(buildOutsideMask(administrativeUnits));
     }
     if (!map.getLayer("haiphong-outside-mask")) {
-      map.addLayer({ id: "haiphong-outside-mask", type: "fill", source: "haiphong-outside-mask", layout: { visibility: useAppStore.getState().dimOutsideHaiphong ? "visible" : "none" }, paint: { "fill-color": "#03101a", "fill-opacity": 0.64 } });
+      map.addLayer({ id: "haiphong-outside-mask", type: "fill", source: "haiphong-outside-mask", layout: { visibility: useAppStore.getState().dimOutsideHaiphong && map.getZoom() >= 2 ? "visible" : "none" }, paint: { "fill-color": "#03101a", "fill-opacity": 0.64 } });
     }
     const shouldBindAdministrativeInteractions = !map.getLayer("administrative-fill");
     if (!map.getLayer("administrative-fill")) {

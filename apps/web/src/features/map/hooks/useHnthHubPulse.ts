@@ -9,6 +9,7 @@ import type { MapScope } from "./useMapScope";
 export function useHnthHubPulse(context: MapScope) {
   const { mapRef, hnthHubPulseMarkerRef, hnthContinuousMonitoringRef, hnthAgentOnlineRef, isMapReady } = context;
   const layers = useAppStore((state) => state.layers);
+  const hubEnabled = useAppStore((state) => state.hubEnabled);
   const activePanel = useAppStore((state) => state.activePanel);
   useEffect(() => {
     const removeHubPulse = () => {
@@ -22,7 +23,8 @@ export function useHnthHubPulse(context: MapScope) {
       const hub = hnthLayer?.data.features.find((feature) => (
         feature.geometry.type === "Point" && feature.properties?.role === "hub"
       ));
-      if (!map || !isMapReady || !hnthContinuousMonitoringRef.current || !hnthAgentOnlineRef.current || activePanel !== "conference" || !hub || hub.geometry.type !== "Point") {
+      const shouldShowHubMarker = hubEnabled || (hnthContinuousMonitoringRef.current && hnthAgentOnlineRef.current && activePanel === "conference");
+      if (!map || !isMapReady || !shouldShowHubMarker || !hub || hub.geometry.type !== "Point") {
         removeHubPulse();
         return;
       }
@@ -55,5 +57,5 @@ export function useHnthHubPulse(context: MapScope) {
       stopLive();
       removeHubPulse();
     };
-  }, [activePanel, isMapReady, layers]);
+  }, [activePanel, hubEnabled, isMapReady, layers]);
 }

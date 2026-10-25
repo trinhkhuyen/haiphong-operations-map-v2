@@ -2,4 +2,5 @@
 // xem AppEventMap trong core/events.ts).
 export type FixedMapInfo =
   | { kind: "administrative"; unitId: number; includeConnectionPoint: boolean }
-  | { kind: "hnth"; pointId: string; administrativeId?: number; pulseBoundary?: boolean };
+  | { kind: "hnth"; pointId: string; administrativeId?: number; pulseBoundary?: boolean }
+  | { kind: "camera"; deviceId: string };
